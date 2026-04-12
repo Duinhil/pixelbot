@@ -5,7 +5,7 @@ interface Config {
   clientSecret: string;
   redirectUri: string;
   port: number;
-  chatChannel: string; // login name, resolved to user ID at startup
+  chatChannels: string[]; // login names, resolved to user IDs at startup
 }
 
 function requireEnv(name: string): string {
@@ -19,5 +19,5 @@ export const config: Config = {
   clientSecret: requireEnv('CLIENT_SECRET'),
   redirectUri: requireEnv('REDIRECT_URI'),
   port: parseInt(process.env['PORT'] ?? '3000', 10),
-  chatChannel: requireEnv('CHAT_CHANNEL'),
+  chatChannels: requireEnv('CHAT_CHANNELS').split(',').map((c) => c.trim()).filter(Boolean),
 };

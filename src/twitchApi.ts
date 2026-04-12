@@ -29,7 +29,7 @@ export async function lookupUserId(login: string, accessToken: string): Promise<
 
   const data = await response.json() as { data: Array<{ id: string; login: string }> };
   if (data.data.length === 0) {
-    throw new Error(`Twitch user "${login}" not found. Check CHAT_CHANNEL in your .env.`);
+    throw new Error(`Twitch user "${login}" not found. Check CHAT_CHANNELS in your .env.`);
   }
 
   const user = data.data[0];

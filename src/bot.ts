@@ -26,6 +26,7 @@ interface NotificationMessage {
   };
   payload: {
     event: {
+      broadcaster_user_id: string;
       broadcaster_user_login: string;
       chatter_user_login: string;
       message: { text: string };
@@ -64,9 +65,11 @@ export async function startBot(initialTokens: StoredTokens): Promise<void> {
   const accessToken = await getValidToken();
   await validateToken(accessToken);
 
-  const channelUserId = await lookupUserId(config.chatChannel, accessToken);
+  const channelUserIds = await Promise.all(
+    config.chatChannels.map((channel) => lookupUserId(channel, accessToken)),
+  );
 
-  startWebSocketClient(getValidToken, tokens.user_id, channelUserId);
+  startWebSocketClient(getValidToken, tokens.user_id, channelUserIds);
 }
 
 // --- WebSocket ---
@@ -74,7 +77,7 @@ export async function startBot(initialTokens: StoredTokens): Promise<void> {
 function startWebSocketClient(
   getValidToken: () => Promise<string>,
   botUserId: string,
-  channelUserId: string,
+  channelUserIds: string[],
 ): WebSocket {
   const client = new WebSocket(EVENTSUB_WEBSOCKET_URL);
 
@@ -89,7 +92,7 @@ function startWebSocketClient(
       JSON.parse(data.toString()) as EventSubMessage,
       getValidToken,
       botUserId,
-      channelUserId,
+      channelUserIds,
     );
   });
 
@@ -100,19 +103,21 @@ function handleWebSocketMessage(
   data: EventSubMessage,
   getValidToken: () => Promise<string>,
   botUserId: string,
-  channelUserId: string,
+  channelUserIds: string[],
 ): void {
   switch (data.metadata.message_type) {
     case 'session_welcome': {
       const msg = data as SessionWelcomeMessage;
       const sessionId = msg.payload.session.id;
-      getValidToken().then((token) => registerEventSubListeners(token, sessionId, botUserId, channelUserId));
+      getValidToken().then((token) =>
+        Promise.all(channelUserIds.map((cid) => registerEventSubListeners(token, sessionId, botUserId, cid))),
+      );
       break;
     }
     case 'notification': {
       const msg = data as NotificationMessage;
       if (msg.metadata.subscription_type === 'channel.chat.message') {
-        const { broadcaster_user_login, chatter_user_login, message } = msg.payload.event;
+        const { broadcaster_user_id, broadcaster_user_login, chatter_user_login, message } = msg.payload.event;
         console.log(`MSG #${broadcaster_user_login} <${chatter_user_login}> ${message.text}`);
 
         const [commandWord, ...args] = message.text.trim().split(/\s+/);
@@ -123,7 +128,7 @@ function handleWebSocketMessage(
             args,
             say: async (text) => {
               const token = await getValidToken();
-              await sendChatMessage(token, text, botUserId, channelUserId);
+              await sendChatMessage(token, text, botUserId, broadcaster_user_id);
             },
             getToken: getValidToken,
           });
