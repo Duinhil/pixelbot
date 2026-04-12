@@ -50,6 +50,23 @@ function scoreFarkle(dice: number[]): number {
   return score;
 }
 
+const COOKIE_URL = 'https://pastebin.com/raw/jrBRihKe';
+const COOKIE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+const cookieList = {
+  items: [] as string[],
+  fetchedAt: 0,
+
+  async random(): Promise<string> {
+    if (this.items.length === 0 || Date.now() - this.fetchedAt > COOKIE_TTL_MS) {
+      const text = await fetch(COOKIE_URL).then((r) => r.text());
+      this.items = text.split('\n').map((l) => l.trim()).filter(Boolean);
+      this.fetchedAt = Date.now();
+    }
+    return this.items[Math.floor(Math.random() * this.items.length)];
+  },
+};
+
 const commands: Record<string, CommandHandler> = {
   youtube: ({ say }) =>
     say('Check out our VODs on https://www.youtube.com/@ShiroiiAmeVODs'),
@@ -83,10 +100,7 @@ const commands: Record<string, CommandHandler> = {
     say(`${sender} is operating at ${roll(1, 100)}% brain power!`),
 
   cookie: async ({ sender, say }) => {
-    const res = await fetch('https://pastebin.com/raw/jrBRihKe');
-    const text = await res.text();
-    const items = text.split('\n').map((l) => l.trim()).filter(Boolean);
-    const pick = items[Math.floor(Math.random() * items.length)];
+    const pick = await cookieList.random();
     return say(`${sender} has been given ${pick}! shiroi84Foxhappy`);
   },
 
