@@ -14,7 +14,13 @@ export interface ValidateResponse {
   expires_in: number;
 }
 
-export async function lookupUserId(login: string, accessToken: string): Promise<string> {
+export interface TwitchUser {
+  id: string;
+  login: string;
+  displayName: string;
+}
+
+export async function lookupUserId(login: string, accessToken: string): Promise<TwitchUser> {
   const url = `https://api.twitch.tv/helix/users?login=${encodeURIComponent(login)}`;
   const response = await fetch(url, {
     headers: {
@@ -27,14 +33,14 @@ export async function lookupUserId(login: string, accessToken: string): Promise<
     throw new Error(`Failed to look up user "${login}": HTTP ${response.status}`);
   }
 
-  const data = await response.json() as { data: Array<{ id: string; login: string }> };
+  const data = await response.json() as { data: Array<{ id: string; login: string; display_name: string }> };
   if (data.data.length === 0) {
     throw new Error(`Twitch user "${login}" not found. Check CHAT_CHANNELS in your .env.`);
   }
 
   const user = data.data[0];
   console.log(`Resolved channel "${login}" → user ID ${user.id}`);
-  return user.id;
+  return { id: user.id, login: user.login, displayName: user.display_name };
 }
 
 export interface ChannelInfo {

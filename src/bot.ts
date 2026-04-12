@@ -28,7 +28,9 @@ interface NotificationMessage {
     event: {
       broadcaster_user_id: string;
       broadcaster_user_login: string;
+      broadcaster_user_name: string;
       chatter_user_login: string;
+      chatter_user_name: string;
       message: { text: string };
     };
   };
@@ -66,7 +68,7 @@ export async function startBot(initialTokens: StoredTokens): Promise<void> {
   await validateToken(accessToken);
 
   const channelUserIds = await Promise.all(
-    config.chatChannels.map((channel) => lookupUserId(channel, accessToken)),
+    config.chatChannels.map(async (channel) => (await lookupUserId(channel, accessToken)).id),
   );
 
   startWebSocketClient(getValidToken, tokens.user_id, channelUserIds);
@@ -117,14 +119,14 @@ function handleWebSocketMessage(
     case 'notification': {
       const msg = data as NotificationMessage;
       if (msg.metadata.subscription_type === 'channel.chat.message') {
-        const { broadcaster_user_id, broadcaster_user_login, chatter_user_login, message } = msg.payload.event;
-        console.log(`MSG #${broadcaster_user_login} <${chatter_user_login}> ${message.text}`);
+        const { broadcaster_user_id, broadcaster_user_name, chatter_user_name, message } = msg.payload.event;
+        console.log(`MSG #${broadcaster_user_name} <${chatter_user_name}> ${message.text}`);
 
         const [commandWord, ...args] = message.text.trim().split(/\s+/);
         if (commandWord.startsWith('!')) {
           const name = commandWord.slice(1);
           handleCommand(name, {
-            sender: chatter_user_login,
+            sender: chatter_user_name,
             args,
             say: async (text) => {
               const token = await getValidToken();

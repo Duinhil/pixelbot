@@ -129,12 +129,12 @@ const commands: Record<string, CommandHandler> = {
     if (!target) return say('Usage: !so <channel>');
 
     const token = await getToken();
-    const userId = await lookupUserId(target, token).catch(() => null);
-    if (!userId) return say(`Couldn't find Twitch user "${target}".`);
+    const user = await lookupUserId(target, token).catch(() => null);
+    if (!user) return say(`Couldn't find Twitch user "${target}".`);
 
-    const info = await getChannelInfo(userId, token);
+    const info = await getChannelInfo(user.id, token);
     const game = info?.game_name || 'something awesome';
-    return say(`Check out ${target}, they are playing ${game} at https://twitch.tv/${target}`);
+    return say(`Check out ${user.displayName}, they are playing ${game} at https://twitch.tv/${user.login}`);
   },
 };
 
