@@ -32,6 +32,7 @@ interface NotificationMessage {
       chatter_user_login: string;
       chatter_user_name: string;
       message: { text: string };
+      badges: Array<{ set_id: string }>;
     };
   };
 }
@@ -119,8 +120,9 @@ function handleWebSocketMessage(
     case 'notification': {
       const msg = data as NotificationMessage;
       if (msg.metadata.subscription_type === 'channel.chat.message') {
-        const { broadcaster_user_id, broadcaster_user_name, chatter_user_name, message } = msg.payload.event;
+        const { broadcaster_user_id, broadcaster_user_name, chatter_user_name, message, badges } = msg.payload.event;
         console.log(`MSG #${broadcaster_user_name} <${chatter_user_name}> ${message.text}`);
+        const isModerator = badges.some((b) => b.set_id === 'moderator' || b.set_id === 'lead_moderator' || b.set_id === 'broadcaster');
 
         const [commandWord, ...args] = message.text.trim().split(/\s+/);
         if (commandWord.startsWith('!')) {
@@ -128,6 +130,7 @@ function handleWebSocketMessage(
           handleCommand(name, {
             sender: chatter_user_name,
             args,
+            isModerator,
             say: async (text) => {
               const token = await getValidToken();
               await sendChatMessage(token, text, botUserId, broadcaster_user_id);

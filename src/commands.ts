@@ -4,11 +4,18 @@ import { lookupUserId, getChannelInfo } from './twitchApi';
 export interface CommandContext {
   sender: string;                          // chatter's display name
   args: string[];                          // words after the command
+  isModerator: boolean;                    // true for mods and the broadcaster
   say: (text: string) => Promise<void>;   // send a message to the channel
   getToken: () => Promise<string>;         // resolve a valid access token
 }
 
 type CommandHandler = (ctx: CommandContext) => Promise<void> | void;
+
+interface CommandDefinition {
+  handler: CommandHandler;
+  cooldownSeconds?: number;  // 0 or undefined = no limit
+  moderatorOnly?: boolean;
+}
 
 function roll(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -67,93 +74,137 @@ const cookieList = {
   },
 };
 
-const commands: Record<string, CommandHandler> = {
-  youtube: ({ say }) =>
-    say('Check out our VODs on https://www.youtube.com/@ShiroiiAmeVODs'),
-
-  discord: ({ say }) =>
-    say('Join us at https://discord.gg/YZHkFpQZYV'),
-
-  dice: ({ say }) =>
-    say('shiroi84Crimbo Hey I heard you have some dice in your pockets shiroi84Crimbo'),
-
-  beacon: ({ say }) =>
-    say('shiroi84Crimbo a new hand touches the beacon shiroi84Crimbo'),
-
-  raid1: ({ say }) =>
-    say('shiroi84Foxbop Can\'t dodge this tail swipe! shiroi84Foxbop Can\'t dodge this tail swipe! shiroi84Foxbop Can\'t dodge this tail swipe! shiroi84Foxbop'),
-
-  raid2: ({ say }) =>
-    say('twitchRaid Can\'t dodge this raid! twitchRaid twitchRaid Can\'t dodge this raid! twitchRaid twitchRaid Can\'t dodge this raid! twitchRaid'),
-
-  farkle: ({ sender, say }) => {
-    const dice = Array.from({ length: 6 }, () => roll(1, 6));
-    const score = scoreFarkle(dice);
-    const diceStr = dice.join(', ');
-    if (score === 0) {
-      return say(`${sender} rolled ${diceStr} - FARKLE! 0 points!`);
-    }
-    return say(`${sender} rolled ${diceStr} and scored ${score.toLocaleString()} points!`);
+const commands: Record<string, CommandDefinition> = {
+  youtube: {
+    handler: ({ say }) =>
+      say('Check out our VODs on https://www.youtube.com/@ShiroiiAmeVODs'),
   },
 
-  brain: ({ sender, say }) =>
-    say(`${sender} is operating at ${roll(1, 100)}% brain power!`),
-
-  cookie: async ({ sender, say }) => {
-    const pick = await cookieList.random();
-    return say(`${sender} has been given ${pick}! shiroi84Foxhappy`);
+  discord: {
+    handler: ({ say }) =>
+      say('Join us at https://discord.gg/YZHkFpQZYV'),
   },
 
-  crimbo: ({ sender, say }) =>
-    say(`${sender} is going to prague`),
+  dice: {
+    handler: ({ say }) =>
+      say('shiroi84Crimbo Hey I heard you have some dice in your pockets shiroi84Crimbo'),
+  },
 
-  owlbear: ({ sender, say }) =>
-    say(`${sender} votes to adopt Sir Naughten McFluffle Bottom the Third Mr. Floofy Goober Dude CocoMittenPaw BearOwl!`),
+  beacon: {
+    handler: ({ say }) =>
+      say('shiroi84Crimbo a new hand touches the beacon shiroi84Crimbo'),
+  },
 
-  cheesecake: ({ sender, say }) =>
-    say(`${sender} gives Shiroi cheesecake, but she hates cheesecake and throws it back in your face! Make sure you chew shiroi84Foxangry`),
+  raid1: {
+    handler: ({ say }) =>
+      say('shiroi84Foxbop Can\'t dodge this tail swipe! shiroi84Foxbop Can\'t dodge this tail swipe! shiroi84Foxbop Can\'t dodge this tail swipe! shiroi84Foxbop'),
+  },
 
-  lurk: ({ sender, say }) =>
-    say(`${sender}! How dare you attempt to hide in the shadows! I demand your full attention! Get baaaaaack here! shiroi84Foxangry`),
+  raid2: {
+    handler: ({ say }) =>
+      say('twitchRaid Can\'t dodge this raid! twitchRaid twitchRaid Can\'t dodge this raid! twitchRaid twitchRaid Can\'t dodge this raid! twitchRaid'),
+  },
 
-  crime:   ({ say }) => say(`Shiroi has committed ${incrementCount('crime')} crimes`),
-  pet:     ({ say }) => say(`Pixel has been pet ${incrementCount('pet')} times`),
-  feed:    ({ say }) => say(`Pixel has been fed ${incrementCount('feed')} times`),
-  scammed: ({ say }) => say(`Shiroi has been scammed ${incrementCount('scammed')} times`),
-  fine:    ({ say }) => say(`Shiroi was fine ${incrementCount('fine')} times`),
-  accuse:  ({ say }) => say(`Clevvur has accused Shiroi of ${incrementCount('accuse')} things`),
-  box:     ({ say }) => say(`Streamer has said she loves Yellow Boxes ${incrementCount('box')} times`),
+  farkle: {
+    handler: ({ sender, say }) => {
+      const dice = Array.from({ length: 6 }, () => roll(1, 6));
+      const score = scoreFarkle(dice);
+      const diceStr = dice.join(', ');
+      if (score === 0) {
+        return say(`${sender} rolled ${diceStr} - FARKLE! 0 points!`);
+      }
+      return say(`${sender} rolled ${diceStr} and scored ${score.toLocaleString()} points!`);
+    },
+  },
 
-  so: async ({ args, say, getToken }) => {
-    const target = args[0]?.replace(/^@/, '').toLowerCase();
-    if (!target) return say('Usage: !so <channel>');
+  brain: {
+    handler: ({ sender, say }) =>
+      say(`${sender} is operating at ${roll(1, 100)}% brain power!`),
+  },
 
-    const token = await getToken();
-    const user = await lookupUserId(target, token).catch(() => null);
-    if (!user) return say(`Couldn't find Twitch user "${target}".`);
+  cookie: {
+    handler: async ({ sender, say }) => {
+      const pick = await cookieList.random();
+      return say(`${sender} has been given ${pick}! shiroi84Foxhappy`);
+    },
+    cooldownSeconds: 3600,
+  },
 
-    const info = await getChannelInfo(user.id, token);
-    const game = info?.game_name || 'something awesome';
-    return say(`Check out ${user.displayName}, they are playing ${game} at https://twitch.tv/${user.login}`);
+  crimbo: {
+    handler: ({ sender, say }) =>
+      say(`${sender} is going to prague`),
+  },
+
+  owlbear: {
+    handler: ({ sender, say }) =>
+      say(`${sender} votes to adopt Sir Naughten McFluffle Bottom the Third Mr. Floofy Goober Dude CocoMittenPaw BearOwl!`),
+  },
+
+  cheesecake: {
+    handler: ({ sender, say }) =>
+      say(`${sender} gives Shiroi cheesecake, but she hates cheesecake and throws it back in your face! Make sure you chew shiroi84Foxangry`),
+  },
+
+  lurk: {
+    handler: ({ sender, say }) =>
+      say(`${sender}! How dare you attempt to hide in the shadows! I demand your full attention! Get baaaaaack here! shiroi84Foxangry`),
+  },
+
+  crime:   { handler: ({ say }) => say(`Shiroi has committed ${incrementCount('crime')} crimes`), },
+  pet:     { handler: ({ say }) => say(`Pixel has been pet ${incrementCount('pet')} times`),        cooldownSeconds: 3600 },
+  feed:    { handler: ({ say }) => say(`Pixel has been fed ${incrementCount('feed')} times`),       cooldownSeconds: 3600 },
+  scammed: { handler: ({ say }) => say(`Shiroi has been scammed ${incrementCount('scammed')} times`), },
+  fine:    { handler: ({ say }) => say(`Shiroi was fine ${incrementCount('fine')} times`), },
+  accuse:  { handler: ({ say }) => say(`Clevvur has accused Shiroi of ${incrementCount('accuse')} things`), },
+  box:     { handler: ({ say }) => say(`Streamer has said she loves Yellow Boxes ${incrementCount('box')} times`), },
+
+  so: {
+    moderatorOnly: true,
+    handler: async ({ args, say, getToken }) => {
+      const target = args[0]?.replace(/^@/, '').toLowerCase();
+      if (!target) return say('Usage: !so <channel>');
+
+      const token = await getToken();
+      const user = await lookupUserId(target, token).catch(() => null);
+      if (!user) return say(`Couldn't find Twitch user "${target}".`);
+
+      const info = await getChannelInfo(user.id, token);
+      const game = info?.game_name || 'something awesome';
+      return say(`Check out ${user.displayName}, they are playing ${game} at https://twitch.tv/${user.login}`);
+    },
   },
 };
 
+const commandLastUsed = new Map<string, number>();
+
 export async function handleCommand(name: string, ctx: CommandContext): Promise<void> {
   const lname = name.toLowerCase();
-  let handler = commands[lname];
+  let def = commands[lname];
 
-  if (!handler) {
+  if (!def) {
     const diceMatch = lname.match(/^d(\d+)$/);
     if (diceMatch) {
       const sides = parseInt(diceMatch[1], 10);
-      handler = ({ sender, say }) => say(`${sender} rolled ${roll(1, sides)}!`);
+      def = {
+        handler: ({ sender, say }) => say(`${sender} rolled ${roll(1, sides)}!`),
+      };
     } else {
       return;
     }
   }
 
+  if (def.moderatorOnly && !ctx.isModerator) return;
+
+  const cooldown = def.cooldownSeconds ?? 0;
+  if (cooldown > 0) {
+    const key = `${lname}:${ctx.sender.toLowerCase()}`;
+    const lastUsed = commandLastUsed.get(key);
+    if (lastUsed && Date.now() - lastUsed < cooldown * 1000) return;
+    commandLastUsed.set(key, Date.now());
+  }
+
   try {
-    await handler(ctx);
+    await def.handler(ctx);
   } catch (err) {
     console.error(`Error handling !${name}:`, err);
   }
