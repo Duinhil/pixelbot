@@ -37,12 +37,27 @@ interface NotificationMessage {
   };
 }
 
+interface SessionReconnectMessage {
+  metadata: { message_type: 'session_reconnect' };
+  payload: { session: { id: string; reconnect_url: string } };
+}
+
+interface StreamOnlineMessage {
+  metadata: { message_type: 'notification'; subscription_type: 'stream.online' };
+  payload: {
+    event: {
+      broadcaster_user_id: string;
+      broadcaster_user_name: string;
+    };
+  };
+}
+
 interface GenericMessage {
   metadata: { message_type: string };
   payload: Record<string, unknown>;
 }
 
-type EventSubMessage = SessionWelcomeMessage | NotificationMessage | GenericMessage;
+type EventSubMessage = SessionWelcomeMessage | SessionReconnectMessage | NotificationMessage | GenericMessage;
 
 // --- Bot entry point ---
 
@@ -81,22 +96,35 @@ function startWebSocketClient(
   getValidToken: () => Promise<string>,
   botUserId: string,
   channelUserIds: string[],
+  url: string = EVENTSUB_WEBSOCKET_URL,
+  skipSubscriptions: boolean = false,
 ): WebSocket {
-  const client = new WebSocket(EVENTSUB_WEBSOCKET_URL);
+  let reconnecting = false;
+  const client = new WebSocket(url);
 
   client.on('error', console.error);
 
   client.on('open', () => {
-    console.log('WebSocket connection opened to ' + EVENTSUB_WEBSOCKET_URL);
+    console.log('WebSocket connection opened to ' + url);
+  });
+
+  client.on('close', (code, reason) => {
+    if (reconnecting) return;
+    console.log(`WebSocket closed (${code}: ${reason ?? 'unknown'}). Reconnecting in 5s...`);
+    setTimeout(() => startWebSocketClient(getValidToken, botUserId, channelUserIds), 5_000);
   });
 
   client.on('message', (data) => {
-    handleWebSocketMessage(
-      JSON.parse(data.toString()) as EventSubMessage,
-      getValidToken,
-      botUserId,
-      channelUserIds,
-    );
+    const msg = JSON.parse(data.toString()) as EventSubMessage;
+    if (msg.metadata.message_type === 'session_reconnect') {
+      const reconnectUrl = (msg as SessionReconnectMessage).payload.session.reconnect_url;
+      console.log(`Received session_reconnect, moving to ${reconnectUrl}`);
+      reconnecting = true;
+      startWebSocketClient(getValidToken, botUserId, channelUserIds, reconnectUrl, true);
+      client.close();
+      return;
+    }
+    handleWebSocketMessage(msg, getValidToken, botUserId, channelUserIds, skipSubscriptions);
   });
 
   return client;
@@ -107,19 +135,30 @@ function handleWebSocketMessage(
   getValidToken: () => Promise<string>,
   botUserId: string,
   channelUserIds: string[],
+  skipSubscriptions: boolean,
 ): void {
   switch (data.metadata.message_type) {
     case 'session_welcome': {
       const msg = data as SessionWelcomeMessage;
       const sessionId = msg.payload.session.id;
-      getValidToken().then((token) =>
-        Promise.all(channelUserIds.map((cid) => registerEventSubListeners(token, sessionId, botUserId, cid))),
-      );
+      if (skipSubscriptions) {
+        console.log(`Reconnected with session ${sessionId}`);
+      } else {
+        getValidToken().then((token) =>
+          Promise.all(channelUserIds.map((cid) => registerEventSubListeners(token, sessionId, botUserId, cid))),
+        );
+      }
       break;
     }
     case 'notification': {
       const msg = data as NotificationMessage;
-      if (msg.metadata.subscription_type === 'channel.chat.message') {
+      if (msg.metadata.subscription_type === 'stream.online') {
+        const { broadcaster_user_id, broadcaster_user_name } = (msg as unknown as StreamOnlineMessage).payload.event;
+        console.log(`STREAM ONLINE #${broadcaster_user_name}`);
+        getValidToken().then((token) =>
+          sendChatMessage(token, 'shiroi84Foxbop shiroi84Foxbop shiroi84Foxbop', botUserId, broadcaster_user_id),
+        );
+      } else if (msg.metadata.subscription_type === 'channel.chat.message') {
         const { broadcaster_user_id, broadcaster_user_name, chatter_user_name, message, badges } = msg.payload.event;
         console.log(`MSG #${broadcaster_user_name} <${chatter_user_name}> ${message.text}`);
         const isModerator = badges.some((b) => b.set_id === 'moderator' || b.set_id === 'lead_moderator' || b.set_id === 'broadcaster');
