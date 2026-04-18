@@ -9,6 +9,9 @@ import {
   lookupUserId,
 } from './twitchApi';
 import { handleCommand } from './commands';
+import { PeriodicMessageScheduler, loadPeriodicMessagesConfig } from './periodicMessages';
+
+const periodicScheduler = new PeriodicMessageScheduler(loadPeriodicMessagesConfig());
 
 const EVENTSUB_WEBSOCKET_URL = 'wss://eventsub.wss.twitch.tv/ws';
 
@@ -44,6 +47,16 @@ interface SessionReconnectMessage {
 
 interface StreamOnlineMessage {
   metadata: { message_type: 'notification'; subscription_type: 'stream.online' };
+  payload: {
+    event: {
+      broadcaster_user_id: string;
+      broadcaster_user_name: string;
+    };
+  };
+}
+
+interface StreamOfflineMessage {
+  metadata: { message_type: 'notification'; subscription_type: 'stream.offline' };
   payload: {
     event: {
       broadcaster_user_id: string;
@@ -155,9 +168,17 @@ function handleWebSocketMessage(
       if (msg.metadata.subscription_type === 'stream.online') {
         const { broadcaster_user_id, broadcaster_user_name } = (msg as unknown as StreamOnlineMessage).payload.event;
         console.log(`STREAM ONLINE #${broadcaster_user_name}`);
-        getValidToken().then((token) =>
-          sendChatMessage(token, 'shiroi84Foxbop shiroi84Foxbop shiroi84Foxbop', botUserId, broadcaster_user_id),
-        );
+        getValidToken().then(async (token) => {
+          await sendChatMessage(token, 'shiroi84Foxbop shiroi84Foxbop shiroi84Foxbop', botUserId, broadcaster_user_id);
+          periodicScheduler.start(async (text) => {
+            const t = await getValidToken();
+            await sendChatMessage(t, text, botUserId, broadcaster_user_id);
+          });
+        });
+      } else if (msg.metadata.subscription_type === 'stream.offline') {
+        const { broadcaster_user_name } = (msg as unknown as StreamOfflineMessage).payload.event;
+        console.log(`STREAM OFFLINE #${broadcaster_user_name}`);
+        periodicScheduler.stop();
       } else if (msg.metadata.subscription_type === 'channel.chat.message') {
         const { broadcaster_user_id, broadcaster_user_name, chatter_user_name, message, badges } = msg.payload.event;
         console.log(`MSG #${broadcaster_user_name} <${chatter_user_name}> ${message.text}`);

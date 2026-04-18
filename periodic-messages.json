@@ -1,0 +1,15 @@
+{
+  "globalLimits": {
+    "minGapSeconds": 300,
+    "maxPerHour": 2,
+    "startupGraceSeconds": 300
+  },
+  "messages": [
+    {
+      "id": "Henry",
+      "text": "I feel quite hungry!",
+      "minIntervalSeconds": 3600,
+      "maxIntervalSeconds": 36000
+    }
+  ]
+}

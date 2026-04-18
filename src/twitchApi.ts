@@ -207,4 +207,34 @@ export async function registerEventSubListeners(accessToken: string, sessionId: 
     const data = await onlineResponse.json() as { data: Array<{ id: string }> };
     console.log(`Subscribed to stream.online [${data.data[0].id}]`);
   }
+
+  const offlineResponse = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Client-Id': config.clientId,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      type: 'stream.offline',
+      version: '1',
+      condition: {
+        broadcaster_user_id: channelUserId,
+      },
+      transport: {
+        method: 'websocket',
+        session_id: sessionId,
+      },
+    }),
+  });
+
+  if (offlineResponse.status !== 202) {
+    const data = await offlineResponse.json();
+    console.error('Failed to subscribe to stream.offline. Status:', offlineResponse.status);
+    console.error(data);
+    process.exit(1);
+  } else {
+    const data = await offlineResponse.json() as { data: Array<{ id: string }> };
+    console.log(`Subscribed to stream.offline [${data.data[0].id}]`);
+  }
 }
