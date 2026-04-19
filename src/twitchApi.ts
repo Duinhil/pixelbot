@@ -146,6 +146,23 @@ export async function sendChatMessage(accessToken: string, chatMessage: string, 
   }
 }
 
+export async function isStreamLive(broadcasterId: string, accessToken: string): Promise<boolean> {
+  const response = await fetch(
+    `https://api.twitch.tv/helix/streams?user_id=${encodeURIComponent(broadcasterId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Client-Id': config.clientId,
+      },
+    },
+  );
+
+  if (!response.ok) return false;
+
+  const data = await response.json() as { data: Array<unknown> };
+  return data.data.length > 0;
+}
+
 export async function registerEventSubListeners(accessToken: string, sessionId: string, botUserId: string, channelUserId: string): Promise<void> {
   const response = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
     method: 'POST',

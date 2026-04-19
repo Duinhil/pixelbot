@@ -7,6 +7,7 @@ import {
   sendChatMessage,
   registerEventSubListeners,
   lookupUserId,
+  isStreamLive,
 } from './twitchApi';
 import { handleCommand } from './commands';
 import { PeriodicMessageScheduler, loadPeriodicMessagesConfig } from './periodicMessages';
@@ -99,6 +100,18 @@ export async function startBot(initialTokens: StoredTokens): Promise<void> {
   const channelUserIds = await Promise.all(
     config.chatChannels.map(async (channel) => (await lookupUserId(channel, accessToken)).id),
   );
+
+  for (const broadcasterId of channelUserIds) {
+    const live = await isStreamLive(broadcasterId, accessToken);
+    if (live) {
+      console.log(`[periodic] Stream already live on startup, starting scheduler for ${broadcasterId}.`);
+      periodicScheduler.start(async (text) => {
+        const t = await getValidToken();
+        await sendChatMessage(t, text, tokens.user_id, broadcasterId);
+      });
+      break;
+    }
+  }
 
   startWebSocketClient(getValidToken, tokens.user_id, channelUserIds);
 }
