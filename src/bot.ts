@@ -181,7 +181,6 @@ function handleWebSocketMessage(
         periodicScheduler.stop();
       } else if (msg.metadata.subscription_type === 'channel.chat.message') {
         const { broadcaster_user_id, broadcaster_user_name, chatter_user_name, message, badges } = msg.payload.event;
-        console.log(`MSG #${broadcaster_user_name} <${chatter_user_name}> ${message.text}`);
         const isModerator = badges.some((b) => b.set_id === 'moderator' || b.set_id === 'lead_moderator' || b.set_id === 'broadcaster');
 
         const [commandWord, ...args] = message.text.trim().split(/\s+/);
