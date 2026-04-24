@@ -150,13 +150,13 @@ const commands: Record<string, CommandDefinition> = {
       say(`${sender}! How dare you attempt to hide in the shadows! I demand your full attention! Get baaaaaack here! shiroi84Foxangry`),
   },
 
-  crime:   { handler: ({ say }) => say(`Shiroi has committed ${incrementCount('crime')} crimes`), },
-  pet:     { handler: ({ say }) => say(`Pixel has been pet ${incrementCount('pet')} times`),        cooldownSeconds: 3600 },
-  feed:    { handler: ({ say }) => say(`Pixel has been fed ${incrementCount('feed')} times`),       cooldownSeconds: 3600 },
+  crime: { handler: ({ say }) => say(`Shiroi has committed ${incrementCount('crime')} crimes`), },
+  pet: { handler: ({ say }) => say(`Pixel has been pet ${incrementCount('pet')} times`), cooldownSeconds: 3600 },
+  feed: { handler: ({ say }) => say(`Pixel has been fed ${incrementCount('feed')} times`), cooldownSeconds: 3600 },
   scammed: { handler: ({ say }) => say(`Shiroi has been scammed ${incrementCount('scammed')} times`), },
-  fine:    { handler: ({ say }) => say(`Shiroi was fine ${incrementCount('fine')} times`), },
-  accuse:  { handler: ({ say }) => say(`Clevvur has accused Shiroi of ${incrementCount('accuse')} things`), },
-  box:     { handler: ({ say }) => say(`Streamer has said she loves Yellow Boxes ${incrementCount('box')} times`), },
+  fine: { handler: ({ say }) => say(`Shiroi was fine ${incrementCount('fine')} times`), },
+  accuse: { handler: ({ say }) => say(`Clevvur has accused Shiroi of ${incrementCount('accuse')} things`), },
+  box: { handler: ({ say }) => say(`Streamer has said she loves Yellow Boxes ${incrementCount('box')} times`), },
 
   so: {
     moderatorOnly: true,
@@ -173,6 +173,70 @@ const commands: Record<string, CommandDefinition> = {
       return say(`Check out ${user.displayName}, they are playing ${game} at https://twitch.tv/${user.login}`);
     },
   },
+  "8ball": {
+    handler: ({ say }) => {
+      const pixelResponses = [
+        "Yep!",
+        "Totally!",
+        "Uh-huh!",
+        "Big yes vibes!",
+        "Do it!",
+        "Sounds like a yes to me!",
+        "Super duper yes!",
+        "Ask again, I'm busy playing!",
+        "Hmm... try again later!",
+        "My crystal ball is sleepy!",
+        "I forgot, ask again!",
+        "Maybe maybe maybe!",
+        "I'll think about it... later!",
+        "Can you repeat that?",
+        "Nope nope nope!",
+        "Not today, sorry!",
+        "I don't think so!",
+        "That's a silly idea!",
+        "My answer is a tiny no!",
+        "Chances look good!",
+        "You might get lucky!",
+        "Something fun is coming!",
+        "Surprise ahead!",
+        "Follow your gut feeling!",
+        "Oops, not the right time!",
+        "Careful, it's a bit tricky!",
+        "Try a different way!",
+        "Go for it, little hero!",
+        "Patience, please!",
+        "NO!!!!!!",
+        "Don't do it...",
+        "No no no no no",
+        "I think that's a bad idea...",
+        "I'm chasing my tails right now",
+        "I demand headpats, not questions!",
+        "Did you bring snacks?",
+        "Fox nap time zzz...",
+        "Head empty, just floof!",
+        "Shh... I'm sneaking!",
+      ];
+      const letMeAskResponses = [
+        'Let me ask yellow box for you',
+      ];
+      const yellowBoxResponses = [
+        'Yellow box says: Yes!',
+        'Yellow box says: No!',
+        'Yellow box says: Maybe!',
+      ];
+      const mergedResponses = pixelResponses.concat(letMeAskResponses);
+      const response = mergedResponses[Math.floor(Math.random() * mergedResponses.length)];
+      if (letMeAskResponses.includes(response)) {
+        return say(response).then(() => {
+          setTimeout(() => {
+            const yellowBoxResponse = yellowBoxResponses[Math.floor(Math.random() * yellowBoxResponses.length)];
+            say(yellowBoxResponse);
+          }, 2000);
+        });
+      }
+      return say(response);
+    }
+  }
 };
 
 const commandLastUsed = new Map<string, number>();
