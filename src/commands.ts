@@ -263,7 +263,11 @@ export async function handleCommand(name: string, ctx: CommandContext): Promise<
   if (cooldown > 0) {
     const key = `${lname}:${ctx.sender.toLowerCase()}`;
     const lastUsed = commandLastUsed.get(key);
-    if (lastUsed && Date.now() - lastUsed < cooldown * 1000) return;
+    if (lastUsed && Date.now() - lastUsed < cooldown * 1000) {
+      const remaining = Math.ceil((cooldown * 1000 - (Date.now() - lastUsed)) / 1000);
+      console.log(`Command !${lname} used by ${ctx.sender} is on cooldown for ${remaining} more seconds.`);
+      return;
+    }
     commandLastUsed.set(key, Date.now());
   }
 
