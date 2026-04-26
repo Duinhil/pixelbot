@@ -123,7 +123,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenRes
   return response.json() as Promise<TokenResponse>;
 }
 
-export async function sendChatMessage(accessToken: string, chatMessage: string, botUserId: string, channelUserId: string): Promise<void> {
+export async function sendChatMessage(accessToken: string, chatMessage: string, botUserId: string, channelUserId: string, isRetry = false): Promise<boolean> {
   const response = await fetch('https://api.twitch.tv/helix/chat/messages', {
     method: 'POST',
     headers: {
@@ -138,12 +138,25 @@ export async function sendChatMessage(accessToken: string, chatMessage: string, 
     }),
   });
 
-  if (response.status !== 200) {
-    const data = await response.json();
-    console.error('Failed to send chat message:', data);
-  } else {
+  if (response.status === 200) {
     console.log('Sent chat message:', chatMessage);
+    return true;
   }
+
+  if (response.status === 429 && !isRetry) {
+    const resetAt = parseInt(response.headers.get('Ratelimit-Reset') ?? '0', 10);
+    const waitMs = resetAt * 1000 - Date.now();
+    if (waitMs > 0 && waitMs <= 5000) {
+      await new Promise((r) => setTimeout(r, waitMs));
+      return sendChatMessage(accessToken, chatMessage, botUserId, channelUserId, true);
+    }
+    console.error(`Rate limited sending chat message — retry in ${Math.ceil(waitMs / 1000)}s, dropping: ${chatMessage}`);
+    return false;
+  }
+
+  const data = await response.json();
+  console.error('Failed to send chat message:', data);
+  return false;
 }
 
 export async function isStreamLive(broadcasterId: string, accessToken: string): Promise<boolean> {

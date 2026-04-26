@@ -5,11 +5,11 @@ export interface CommandContext {
   sender: string;                          // chatter's display name
   args: string[];                          // words after the command
   isModerator: boolean;                    // true for mods and the broadcaster
-  say: (text: string) => Promise<void>;   // send a message to the channel
+  say: (text: string) => Promise<boolean>; // send a message to the channel
   getToken: () => Promise<string>;         // resolve a valid access token
 }
 
-type CommandHandler = (ctx: CommandContext) => Promise<void> | void;
+type CommandHandler = (ctx: CommandContext) => Promise<boolean | void> | void;
 
 interface CommandDefinition {
   handler: CommandHandler;
@@ -268,7 +268,29 @@ export async function handleCommand(name: string, ctx: CommandContext): Promise<
       console.log(`Command !${lname} used by ${ctx.sender} is on cooldown for ${remaining} more seconds.`);
       return;
     }
-    commandLastUsed.set(key, Date.now());
+
+    let sayAttempted = false;
+    let saySucceeded = false;
+    const wrappedCtx: CommandContext = {
+      ...ctx,
+      say: async (text) => {
+        sayAttempted = true;
+        const ok = await ctx.say(text);
+        if (ok) saySucceeded = true;
+        return ok;
+      },
+    };
+
+    try {
+      await def.handler(wrappedCtx);
+    } catch (err) {
+      console.error(`Error handling !${name}:`, err);
+    }
+
+    if (!sayAttempted || saySucceeded) {
+      commandLastUsed.set(key, Date.now());
+    }
+    return;
   }
 
   try {

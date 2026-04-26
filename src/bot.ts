@@ -205,7 +205,7 @@ function handleWebSocketMessage(
             isModerator,
             say: async (text) => {
               const token = await getValidToken();
-              await sendChatMessage(token, text, botUserId, broadcaster_user_id);
+              return sendChatMessage(token, text, botUserId, broadcaster_user_id);
             },
             getToken: getValidToken,
           });
