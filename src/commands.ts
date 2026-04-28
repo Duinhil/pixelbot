@@ -127,7 +127,7 @@ const commands: Record<string, CommandDefinition> = {
       const pick = await cookieList.random();
       return say(`${sender} has been given ${pick}! shiroi84Foxhappy`);
     },
-    cooldownSeconds: 3600,
+    cooldownSeconds: 300,
   },
 
   crimbo: {
