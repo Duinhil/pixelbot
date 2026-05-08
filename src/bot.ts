@@ -12,7 +12,7 @@ import {
 } from './twitchApi';
 import { handleCommand } from './commands';
 import { PeriodicMessageScheduler, loadPeriodicMessagesConfig } from './periodicMessages';
-import { loadVipStealConfig, handleVipStealRedemption, VipStealConfig } from './vipSteal';
+import { loadVipStealConfig, handleVipStealRedemption, expireVipHolders, VipStealConfig } from './vipSteal';
 
 const periodicScheduler = new PeriodicMessageScheduler(loadPeriodicMessagesConfig());
 
@@ -248,6 +248,10 @@ function handleWebSocketMessage(
         const { broadcaster_user_id, broadcaster_user_name } = (msg as unknown as StreamOnlineMessage).payload.event;
         if (broadcaster_user_id !== channelIds.primary) break;
         console.log(`STREAM ONLINE #${broadcaster_user_name}`);
+        if (hasBroadcasterTokens && vipStealConfig) {
+          expireVipHolders(broadcaster_user_id, getValidBroadcasterToken, vipStealConfig)
+            .catch((err) => console.error('VIP expiry error:', err));
+        }
         getValidToken().then(async (token) => {
           await sendChatMessage(token, 'shiroi84Foxbop shiroi84Foxbop shiroi84Foxbop', botUserId, broadcaster_user_id);
           periodicScheduler.start(async (text) => {

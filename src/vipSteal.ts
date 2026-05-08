@@ -8,6 +8,7 @@ export interface VipStealConfig {
   rewardName: string;
   maxVips: number;
   stealStrategy: 'random' | 'fifo';
+  vipDurationDays: number;
 }
 
 interface VipHolder {
@@ -56,6 +57,26 @@ export async function simulateVipStealRedemption(
       ? `(oldest, since ${new Date(victim.added_at).toLocaleDateString()})`
       : '(randomly selected)';
   return `Would steal VIP from @${victim.user_login} ${note} and give to @${userLogin}.`;
+}
+
+export async function expireVipHolders(
+  broadcasterId: string,
+  getBroadcasterToken: () => Promise<string>,
+  config: VipStealConfig,
+): Promise<void> {
+  const cutoff = Date.now() - config.vipDurationDays * 24 * 60 * 60 * 1000;
+  const expired = db
+    .prepare('SELECT user_id, user_login FROM vip_steal_holders WHERE added_at < ?')
+    .all(cutoff) as Array<{ user_id: string; user_login: string }>;
+
+  if (expired.length === 0) return;
+
+  const token = await getBroadcasterToken();
+  for (const holder of expired) {
+    await removeVip(broadcasterId, holder.user_id, token);
+    db.prepare('DELETE FROM vip_steal_holders WHERE user_id = ?').run(holder.user_id);
+    console.log(`[vip-steal] Expired VIP removed: ${holder.user_login}`);
+  }
 }
 
 export async function handleVipStealRedemption(
