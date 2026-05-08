@@ -152,7 +152,7 @@ export async function startBot(initialTokens: StoredTokens, initialBroadcasterTo
   const debugChannelId = config.debugChannel
     ? (await lookupUserId(config.debugChannel, accessToken)).id
     : null;
-  const channelIds: ChannelIds = { primary: primaryChannelId, debug: debugChannelId };
+  const allChannelIds = [primaryChannelId, ...(debugChannelId ? [debugChannelId] : [])];
 
   const live = await isStreamLive(primaryChannelId, accessToken);
   if (live) {
@@ -163,133 +163,73 @@ export async function startBot(initialTokens: StoredTokens, initialBroadcasterTo
     });
   }
 
-  startWebSocketClient(getValidToken, getValidBroadcasterToken, tokens.user_id, channelIds, !!broadcasterTokens, vipStealConfig);
-}
-
-// --- WebSocket ---
-
-interface ChannelIds {
-  primary: string;
-  debug: string | null;
-}
-
-function startWebSocketClient(
-  getValidToken: () => Promise<string>,
-  getValidBroadcasterToken: () => Promise<string>,
-  botUserId: string,
-  channelIds: ChannelIds,
-  hasBroadcasterTokens: boolean,
-  vipStealConfig: VipStealConfig | null,
-  url: string = EVENTSUB_WEBSOCKET_URL,
-  skipSubscriptions: boolean = false,
-): WebSocket {
-  let reconnecting = false;
-  const client = new WebSocket(url);
-
-  client.on('error', console.error);
-
-  client.on('open', () => {
-    console.log('WebSocket connection opened to ' + url);
-  });
-
-  client.on('close', (code, reason) => {
-    if (reconnecting) return;
-    console.log(`WebSocket closed (${code}: ${reason ?? 'unknown'}). Reconnecting in 5s...`);
-    setTimeout(() => startWebSocketClient(getValidToken, getValidBroadcasterToken, botUserId, channelIds, hasBroadcasterTokens, vipStealConfig), 5_000);
-  });
-
-  client.on('message', (data) => {
-    const msg = JSON.parse(data.toString()) as EventSubMessage;
-    if (msg.metadata.message_type === 'session_reconnect') {
-      const reconnectUrl = (msg as SessionReconnectMessage).payload.session.reconnect_url;
-      console.log(`Received session_reconnect, moving to ${reconnectUrl}`);
-      reconnecting = true;
-      startWebSocketClient(getValidToken, getValidBroadcasterToken, botUserId, channelIds, hasBroadcasterTokens, vipStealConfig, reconnectUrl, true);
-      client.close();
-      return;
-    }
-    handleWebSocketMessage(msg, getValidToken, getValidBroadcasterToken, botUserId, channelIds, hasBroadcasterTokens, vipStealConfig, skipSubscriptions);
-  });
-
-  return client;
-}
-
-function handleWebSocketMessage(
-  data: EventSubMessage,
-  getValidToken: () => Promise<string>,
-  getValidBroadcasterToken: () => Promise<string>,
-  botUserId: string,
-  channelIds: ChannelIds,
-  hasBroadcasterTokens: boolean,
-  vipStealConfig: VipStealConfig | null,
-  skipSubscriptions: boolean,
-): void {
-  const allChannelIds = [channelIds.primary, ...(channelIds.debug ? [channelIds.debug] : [])];
-
-  switch (data.metadata.message_type) {
-    case 'session_welcome': {
-      const msg = data as SessionWelcomeMessage;
-      const sessionId = msg.payload.session.id;
-      if (skipSubscriptions) {
-        console.log(`Reconnected with session ${sessionId}`);
-      } else {
-        getValidToken().then((token) =>
-          Promise.all(allChannelIds.map((cid) => registerEventSubListeners(token, sessionId, botUserId, cid))),
-        );
-        if (hasBroadcasterTokens && vipStealConfig) {
-          getValidBroadcasterToken().then((bToken) =>
-            registerRedemptionListener(bToken, sessionId, channelIds.primary),
-          );
-        }
-      }
-      break;
-    }
-    case 'notification': {
-      const msg = data as NotificationMessage;
-      if (msg.metadata.subscription_type === 'stream.online') {
+  // Bot WebSocket: chat messages + stream events
+  startWebSocketClient(
+    'bot',
+    (sessionId) => {
+      getValidToken().then((token) =>
+        Promise.all(allChannelIds.map((cid) => registerEventSubListeners(token, sessionId, tokens.user_id, cid))),
+      );
+    },
+    (msg) => {
+      const sub = (msg as NotificationMessage).metadata.subscription_type;
+      if (sub === 'stream.online') {
         const { broadcaster_user_id, broadcaster_user_name } = (msg as unknown as StreamOnlineMessage).payload.event;
-        if (broadcaster_user_id !== channelIds.primary) break;
+        if (broadcaster_user_id !== primaryChannelId) return;
         console.log(`STREAM ONLINE #${broadcaster_user_name}`);
-        if (hasBroadcasterTokens && vipStealConfig) {
+        if (broadcasterTokens && vipStealConfig) {
           expireVipHolders(broadcaster_user_id, getValidBroadcasterToken, vipStealConfig)
             .catch((err) => console.error('VIP expiry error:', err));
         }
         getValidToken().then(async (token) => {
-          await sendChatMessage(token, 'shiroi84Foxbop shiroi84Foxbop shiroi84Foxbop', botUserId, broadcaster_user_id);
+          await sendChatMessage(token, 'shiroi84Foxbop shiroi84Foxbop shiroi84Foxbop', tokens.user_id, broadcaster_user_id);
           periodicScheduler.start(async (text) => {
             const t = await getValidToken();
-            await sendChatMessage(t, text, botUserId, broadcaster_user_id);
+            await sendChatMessage(t, text, tokens.user_id, broadcaster_user_id);
           });
         });
-      } else if (msg.metadata.subscription_type === 'stream.offline') {
-        const { broadcaster_user_id: offlineBroadcasterId } = (msg as unknown as StreamOfflineMessage).payload.event;
-        if (offlineBroadcasterId !== channelIds.primary) break;
-        console.log(`STREAM OFFLINE #${offlineBroadcasterId}`);
+      } else if (sub === 'stream.offline') {
+        const { broadcaster_user_id } = (msg as unknown as StreamOfflineMessage).payload.event;
+        if (broadcaster_user_id !== primaryChannelId) return;
+        console.log(`STREAM OFFLINE #${broadcaster_user_id}`);
         periodicScheduler.stop();
-      } else if (msg.metadata.subscription_type === 'channel.chat.message') {
-        const { broadcaster_user_id, broadcaster_user_name, chatter_user_name, message, badges } = msg.payload.event;
+      } else if (sub === 'channel.chat.message') {
+        const { broadcaster_user_id, chatter_user_name, message, badges } = (msg as NotificationMessage).payload.event;
         const isModerator = badges.some((b) => b.set_id === 'moderator' || b.set_id === 'lead_moderator' || b.set_id === 'broadcaster');
-        const isDebug = broadcaster_user_id === channelIds.debug;
+        const isDebug = broadcaster_user_id === debugChannelId;
 
         const [commandWord, ...args] = message.text.trim().split(/\s+/);
         if (commandWord.startsWith('!')) {
-          const name = commandWord.slice(1);
-          handleCommand(name, {
+          handleCommand(commandWord.slice(1), {
             sender: chatter_user_name,
             args,
             isModerator,
             isDebug,
             say: async (text) => {
               const token = await getValidToken();
-              return sendChatMessage(token, text, botUserId, broadcaster_user_id);
+              return sendChatMessage(token, text, tokens.user_id, broadcaster_user_id);
             },
             getToken: getValidToken,
           });
         }
-      } else if (msg.metadata.subscription_type === 'channel.channel_points_custom_reward_redemption.add' && vipStealConfig) {
+      }
+    },
+  );
+
+  // Broadcaster WebSocket: channel point redemptions (separate session required by Twitch)
+  if (broadcasterTokens && vipStealConfig) {
+    startWebSocketClient(
+      'broadcaster',
+      (sessionId) => {
+        getValidBroadcasterToken().then((bToken) =>
+          registerRedemptionListener(bToken, sessionId, primaryChannelId),
+        );
+      },
+      (msg) => {
+        if ((msg as NotificationMessage).metadata.subscription_type !== 'channel.channel_points_custom_reward_redemption.add') return;
         const redemption = (msg as unknown as RedemptionNotificationMessage).payload.event;
         console.log(`Channel point redemption: "${redemption.reward.title}" by ${redemption.user_login}`);
-        if (!vipStealConfig.enabled) break;
+        if (!vipStealConfig.enabled) return;
         handleVipStealRedemption(
           redemption.user_id,
           redemption.user_login,
@@ -298,12 +238,62 @@ function handleWebSocketMessage(
           getValidBroadcasterToken,
           async (text) => {
             const token = await getValidToken();
-            return sendChatMessage(token, text, botUserId, redemption.broadcaster_user_id);
+            return sendChatMessage(token, text, tokens.user_id, redemption.broadcaster_user_id);
           },
           vipStealConfig,
         ).catch((err) => console.error('VIP steal handler error:', err));
-      }
-      break;
-    }
+      },
+    );
   }
+}
+
+// --- WebSocket ---
+
+function startWebSocketClient(
+  label: string,
+  onReady: (sessionId: string) => void,
+  onNotification: (msg: EventSubMessage) => void,
+  url: string = EVENTSUB_WEBSOCKET_URL,
+  skipReady: boolean = false,
+): WebSocket {
+  let reconnecting = false;
+  const client = new WebSocket(url);
+
+  client.on('error', console.error);
+
+  client.on('open', () => {
+    console.log(`[${label}] WebSocket connection opened to ${url}`);
+  });
+
+  client.on('close', (code, reason) => {
+    if (reconnecting) return;
+    console.log(`[${label}] WebSocket closed (${code}: ${reason ?? 'unknown'}). Reconnecting in 5s...`);
+    setTimeout(() => startWebSocketClient(label, onReady, onNotification), 5_000);
+  });
+
+  client.on('message', (data) => {
+    const msg = JSON.parse(data.toString()) as EventSubMessage;
+    if (msg.metadata.message_type === 'session_reconnect') {
+      const reconnectUrl = (msg as SessionReconnectMessage).payload.session.reconnect_url;
+      console.log(`[${label}] Received session_reconnect, moving to ${reconnectUrl}`);
+      reconnecting = true;
+      startWebSocketClient(label, onReady, onNotification, reconnectUrl, true);
+      client.close();
+      return;
+    }
+    if (msg.metadata.message_type === 'session_welcome') {
+      const sessionId = (msg as SessionWelcomeMessage).payload.session.id;
+      if (skipReady) {
+        console.log(`[${label}] Reconnected with session ${sessionId}`);
+      } else {
+        onReady(sessionId);
+      }
+      return;
+    }
+    if (msg.metadata.message_type === 'notification') {
+      onNotification(msg);
+    }
+  });
+
+  return client;
 }
