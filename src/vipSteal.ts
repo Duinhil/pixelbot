@@ -21,12 +21,7 @@ export function loadVipStealConfig(): VipStealConfig | null {
   const configPath = path.join(__dirname, '..', 'vip-steal.json');
   if (!fs.existsSync(configPath)) return null;
   try {
-    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as VipStealConfig;
-    if (!cfg.enabled) {
-      console.log('VIP steal is disabled in vip-steal.json.');
-      return null;
-    }
-    return cfg;
+    return JSON.parse(fs.readFileSync(configPath, 'utf-8')) as VipStealConfig;
   } catch {
     console.error('Failed to parse vip-steal.json — VIP steal disabled.');
     return null;

@@ -137,10 +137,12 @@ export async function startBot(initialTokens: StoredTokens, initialBroadcasterTo
   }
 
   const vipStealConfig: VipStealConfig | null = loadVipStealConfig();
-  if (vipStealConfig && broadcasterTokens) {
+  if (vipStealConfig?.enabled && broadcasterTokens) {
     console.log(`VIP steal enabled: reward="${vipStealConfig.rewardName}", max=${vipStealConfig.maxVips}, strategy=${vipStealConfig.stealStrategy}`);
-  } else if (vipStealConfig && !broadcasterTokens) {
+  } else if (vipStealConfig?.enabled && !broadcasterTokens) {
     console.log('vip-steal.json found but no broadcaster tokens — VIP steal disabled. Run with broadcaster auth to enable.');
+  } else if (vipStealConfig && !vipStealConfig.enabled) {
+    console.log('VIP steal redemption is disabled in vip-steal.json (test/fake commands still available).');
   }
 
   const accessToken = await getValidToken();
@@ -234,7 +236,7 @@ function handleWebSocketMessage(
         getValidToken().then((token) =>
           Promise.all(allChannelIds.map((cid) => registerEventSubListeners(token, sessionId, botUserId, cid))),
         );
-        if (hasBroadcasterTokens && vipStealConfig) {
+        if (hasBroadcasterTokens && vipStealConfig?.enabled) {
           getValidBroadcasterToken().then((bToken) =>
             registerRedemptionListener(bToken, sessionId, channelIds.primary),
           );
@@ -284,7 +286,7 @@ function handleWebSocketMessage(
             getToken: getValidToken,
           });
         }
-      } else if (msg.metadata.subscription_type === 'channel.channel_points_custom_reward_redemption.add' && vipStealConfig) {
+      } else if (msg.metadata.subscription_type === 'channel.channel_points_custom_reward_redemption.add' && vipStealConfig?.enabled) {
         const redemption = (msg as unknown as RedemptionNotificationMessage).payload.event;
         console.log(`Channel point redemption: "${redemption.reward.title}" by ${redemption.user_login}`);
         handleVipStealRedemption(
