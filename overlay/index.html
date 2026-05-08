@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pixelbot Overlay</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-origin: top left;
+    }
+
+    /* Widgets use position: absolute with % values within #canvas */
+    .widget {
+      position: absolute;
+    }
+  </style>
+</head>
+<body>
+<div id="canvas">
+  <!-- Widgets are appended here by their registration scripts -->
+</div>
+
+<script>
+  // --- Resolution ---
+  const params = new URLSearchParams(location.search);
+  const W = parseInt(params.get('w') ?? '1920', 10);
+  const H = parseInt(params.get('h') ?? '1080', 10);
+
+  const canvas = document.getElementById('canvas');
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+
+  function applyScale() {
+    const scaleX = window.innerWidth / W;
+    const scaleY = window.innerHeight / H;
+    canvas.style.transform = `scale(${Math.min(scaleX, scaleY)})`;
+  }
+  window.addEventListener('resize', applyScale);
+  applyScale();
+
+  // --- Widget registry ---
+  const PixelOverlay = (() => {
+    const widgets = new Map();
+
+    return {
+      register(name, widget) {
+        widgets.set(name, widget);
+        console.log('[overlay] registered widget:', name);
+      },
+
+      dispatch(event) {
+        for (const [, widget] of widgets) {
+          try {
+            widget.onEvent?.(event);
+          } catch (err) {
+            console.error('[overlay] widget error:', err);
+          }
+        }
+      },
+    };
+  })();
+
+  // Expose globally so widget scripts can call PixelOverlay.register(...)
+  window.PixelOverlay = PixelOverlay;
+
+  // --- WebSocket connection ---
+  function connectWS() {
+    const ws = new WebSocket(`ws://${location.host}`);
+
+    ws.addEventListener('open', () => console.log('[overlay] WebSocket connected'));
+
+    ws.addEventListener('close', () => {
+      console.log('[overlay] WebSocket closed, reconnecting in 3s...');
+      setTimeout(connectWS, 3000);
+    });
+
+    ws.addEventListener('error', (e) => console.error('[overlay] WebSocket error', e));
+
+    ws.addEventListener('message', (e) => {
+      let event;
+      try {
+        event = JSON.parse(e.data);
+      } catch {
+        console.warn('[overlay] received non-JSON message:', e.data);
+        return;
+      }
+      if (event.type === 'ping') return;
+      console.log('[overlay] event received:', event);
+      PixelOverlay.dispatch(event);
+    });
+  }
+
+  connectWS();
+</script>
+
+<!--
+  Add widget <script> tags below this comment.
+  Each widget calls: PixelOverlay.register('widget-name', { onEvent(event) { ... } });
+
+  Widgets should create their own DOM elements and append them to #canvas.
+  Use percentage-based positioning (e.g. style.top = '25%'; style.left = '50%') for
+  coordinate-driven placement.
+-->
+</body>
+</html>

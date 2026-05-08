@@ -5,6 +5,7 @@ interface Config {
   clientSecret: string;
   redirectUri: string;
   port: number;
+  overlayPort: number;
   chatChannel: string;         // primary channel login, resolved to user ID at startup
   debugChannel: string | null; // optional testing channel login
 }
@@ -20,6 +21,7 @@ export const config: Config = {
   clientSecret: requireEnv('CLIENT_SECRET'),
   redirectUri: requireEnv('REDIRECT_URI'),
   port: parseInt(process.env['PORT'] ?? '3000', 10),
+  overlayPort: parseInt(process.env['OVERLAY_PORT'] ?? '3001', 10),
   chatChannel: requireEnv('CHAT_CHANNEL'),
   debugChannel: process.env['DEBUG_CHANNEL']?.trim() || null,
 };

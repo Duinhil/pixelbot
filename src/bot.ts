@@ -11,6 +11,7 @@ import {
   isStreamLive,
 } from './twitchApi';
 import { handleCommand } from './commands';
+import { emitOverlayEvent } from './overlayEvents';
 import { PeriodicMessageScheduler, loadPeriodicMessagesConfig } from './periodicMessages';
 import { loadVipStealConfig, handleVipStealRedemption, expireVipHolders, VipStealConfig } from './vipSteal';
 
@@ -177,6 +178,7 @@ export async function startBot(initialTokens: StoredTokens, initialBroadcasterTo
         const { broadcaster_user_id, broadcaster_user_name } = (msg as unknown as StreamOnlineMessage).payload.event;
         if (broadcaster_user_id !== primaryChannelId) return;
         console.log(`STREAM ONLINE #${broadcaster_user_name}`);
+        emitOverlayEvent({ type: 'stream.online', ts: Date.now(), broadcasterName: broadcaster_user_name });
         if (broadcasterTokens && vipStealConfig) {
           expireVipHolders(broadcaster_user_id, getValidBroadcasterToken, vipStealConfig)
             .catch((err) => console.error('VIP expiry error:', err));
@@ -189,14 +191,17 @@ export async function startBot(initialTokens: StoredTokens, initialBroadcasterTo
           });
         });
       } else if (sub === 'stream.offline') {
-        const { broadcaster_user_id } = (msg as unknown as StreamOfflineMessage).payload.event;
+        const { broadcaster_user_id, broadcaster_user_name: offlineBroadcasterName } = (msg as unknown as StreamOfflineMessage).payload.event;
         if (broadcaster_user_id !== primaryChannelId) return;
         console.log(`STREAM OFFLINE #${broadcaster_user_id}`);
+        emitOverlayEvent({ type: 'stream.offline', ts: Date.now(), broadcasterName: offlineBroadcasterName });
         periodicScheduler.stop();
       } else if (sub === 'channel.chat.message') {
         const { broadcaster_user_id, chatter_user_name, message, badges } = (msg as NotificationMessage).payload.event;
         const isModerator = badges.some((b) => b.set_id === 'moderator' || b.set_id === 'lead_moderator' || b.set_id === 'broadcaster');
         const isDebug = broadcaster_user_id === debugChannelId;
+
+        emitOverlayEvent({ type: 'chat.message', ts: Date.now(), sender: chatter_user_name, text: message.text, emotes: [] });
 
         const [commandWord, ...args] = message.text.trim().split(/\s+/);
         if (commandWord.startsWith('!')) {
@@ -229,6 +234,7 @@ export async function startBot(initialTokens: StoredTokens, initialBroadcasterTo
         if ((msg as NotificationMessage).metadata.subscription_type !== 'channel.channel_points_custom_reward_redemption.add') return;
         const redemption = (msg as unknown as RedemptionNotificationMessage).payload.event;
         console.log(`Channel point redemption: "${redemption.reward.title}" by ${redemption.user_login}`);
+        emitOverlayEvent({ type: 'redemption', ts: Date.now(), rewardId: redemption.reward.id, rewardTitle: redemption.reward.title, userId: redemption.user_id, userLogin: redemption.user_login, userInput: '' });
         if (!vipStealConfig.enabled) return;
         handleVipStealRedemption(
           redemption.user_id,

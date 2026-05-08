@@ -2,8 +2,11 @@ import { config } from './config';
 import { getStoredTokens, getBroadcasterTokens } from './auth/tokenStore';
 import { startAuthServer, startBroadcasterAuthServer } from './auth/server';
 import { startBot } from './bot';
+import { startOverlayServer } from './overlayServer';
 
 (async () => {
+  startOverlayServer();
+
   const stored = getStoredTokens();
 
   let botTokens;
