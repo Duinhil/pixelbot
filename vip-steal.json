@@ -1,4 +1,5 @@
 {
+  "enabled": false,
   "rewardName": "VIP Steal",
   "maxVips": 5,
   "stealStrategy": "fifo"
