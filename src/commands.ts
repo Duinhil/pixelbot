@@ -1,10 +1,13 @@
 import { incrementCount } from './counters';
 import { lookupUserId, getChannelInfo } from './twitchApi';
+import { loadVipStealConfig, simulateVipStealRedemption } from './vipSteal';
+import { fakeVipSimulator } from './vipStealSimulator';
 
 export interface CommandContext {
   sender: string;                          // chatter's display name
   args: string[];                          // words after the command
   isModerator: boolean;                    // true for mods and the broadcaster
+  isDebug: boolean;                        // true when the message is from the debug channel
   say: (text: string) => Promise<boolean>; // send a message to the channel
   getToken: () => Promise<string>;         // resolve a valid access token
 }
@@ -15,6 +18,7 @@ interface CommandDefinition {
   handler: CommandHandler;
   cooldownSeconds?: number;  // 0 or undefined = no limit
   moderatorOnly?: boolean;
+  debugOnly?: boolean;       // silently ignored on the primary channel
 }
 
 function roll(min: number, max: number): number {
@@ -236,7 +240,38 @@ const commands: Record<string, CommandDefinition> = {
       }
       return say(response);
     }
-  }
+  },
+
+  testvip: {
+    debugOnly: true,
+    handler: async ({ sender, args, say }) => {
+      const target = args[0]?.replace(/^@/, '') || sender;
+      const vipConfig = loadVipStealConfig();
+      if (!vipConfig) return say('VIP steal is not configured.');
+      const result = await simulateVipStealRedemption(target, vipConfig);
+      return say(result);
+    },
+  },
+
+  fakevip: {
+    debugOnly: true,
+    handler: async ({ sender, args, say }) => {
+      const vipConfig = loadVipStealConfig();
+      if (!vipConfig) return say('VIP steal is not configured.');
+      const sub = args[0]?.toLowerCase();
+      if (sub === 'list') {
+        const holders = fakeVipSimulator.getHolders();
+        if (holders.length === 0) return say(`No fake VIP holders (0/${vipConfig.maxVips}).`);
+        return say(`Fake VIPs (${holders.length}/${vipConfig.maxVips}): ${holders.map((h) => h.userLogin).join(', ')}`);
+      }
+      if (sub === 'reset') {
+        fakeVipSimulator.reset();
+        return say('Fake VIP store cleared.');
+      }
+      const target = args[0]?.replace(/^@/, '') || sender;
+      return say(fakeVipSimulator.simulate(target, vipConfig));
+    },
+  },
 };
 
 const commandLastUsed = new Map<string, number>();
@@ -257,6 +292,7 @@ export async function handleCommand(name: string, ctx: CommandContext): Promise<
     }
   }
 
+  if (def.debugOnly && !ctx.isDebug) return;
   if (def.moderatorOnly && !ctx.isModerator) return;
 
   const cooldown = def.cooldownSeconds ?? 0;

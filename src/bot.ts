@@ -146,32 +146,36 @@ export async function startBot(initialTokens: StoredTokens, initialBroadcasterTo
   const accessToken = await getValidToken();
   await validateToken(accessToken);
 
-  const channelUserIds = await Promise.all(
-    config.chatChannels.map(async (channel) => (await lookupUserId(channel, accessToken)).id),
-  );
+  const primaryChannelId = (await lookupUserId(config.chatChannel, accessToken)).id;
+  const debugChannelId = config.debugChannel
+    ? (await lookupUserId(config.debugChannel, accessToken)).id
+    : null;
+  const channelIds: ChannelIds = { primary: primaryChannelId, debug: debugChannelId };
 
-  for (const broadcasterId of channelUserIds) {
-    const live = await isStreamLive(broadcasterId, accessToken);
-    if (live) {
-      console.log(`[periodic] Stream already live on startup, starting scheduler for ${broadcasterId}.`);
-      periodicScheduler.start(async (text) => {
-        const t = await getValidToken();
-        await sendChatMessage(t, text, tokens.user_id, broadcasterId);
-      });
-      break;
-    }
+  const live = await isStreamLive(primaryChannelId, accessToken);
+  if (live) {
+    console.log(`[periodic] Stream already live on startup, starting scheduler for ${primaryChannelId}.`);
+    periodicScheduler.start(async (text) => {
+      const t = await getValidToken();
+      await sendChatMessage(t, text, tokens.user_id, primaryChannelId);
+    });
   }
 
-  startWebSocketClient(getValidToken, getValidBroadcasterToken, tokens.user_id, channelUserIds, !!broadcasterTokens, vipStealConfig);
+  startWebSocketClient(getValidToken, getValidBroadcasterToken, tokens.user_id, channelIds, !!broadcasterTokens, vipStealConfig);
 }
 
 // --- WebSocket ---
+
+interface ChannelIds {
+  primary: string;
+  debug: string | null;
+}
 
 function startWebSocketClient(
   getValidToken: () => Promise<string>,
   getValidBroadcasterToken: () => Promise<string>,
   botUserId: string,
-  channelUserIds: string[],
+  channelIds: ChannelIds,
   hasBroadcasterTokens: boolean,
   vipStealConfig: VipStealConfig | null,
   url: string = EVENTSUB_WEBSOCKET_URL,
@@ -189,7 +193,7 @@ function startWebSocketClient(
   client.on('close', (code, reason) => {
     if (reconnecting) return;
     console.log(`WebSocket closed (${code}: ${reason ?? 'unknown'}). Reconnecting in 5s...`);
-    setTimeout(() => startWebSocketClient(getValidToken, getValidBroadcasterToken, botUserId, channelUserIds, hasBroadcasterTokens, vipStealConfig), 5_000);
+    setTimeout(() => startWebSocketClient(getValidToken, getValidBroadcasterToken, botUserId, channelIds, hasBroadcasterTokens, vipStealConfig), 5_000);
   });
 
   client.on('message', (data) => {
@@ -198,11 +202,11 @@ function startWebSocketClient(
       const reconnectUrl = (msg as SessionReconnectMessage).payload.session.reconnect_url;
       console.log(`Received session_reconnect, moving to ${reconnectUrl}`);
       reconnecting = true;
-      startWebSocketClient(getValidToken, getValidBroadcasterToken, botUserId, channelUserIds, hasBroadcasterTokens, vipStealConfig, reconnectUrl, true);
+      startWebSocketClient(getValidToken, getValidBroadcasterToken, botUserId, channelIds, hasBroadcasterTokens, vipStealConfig, reconnectUrl, true);
       client.close();
       return;
     }
-    handleWebSocketMessage(msg, getValidToken, getValidBroadcasterToken, botUserId, channelUserIds, hasBroadcasterTokens, vipStealConfig, skipSubscriptions);
+    handleWebSocketMessage(msg, getValidToken, getValidBroadcasterToken, botUserId, channelIds, hasBroadcasterTokens, vipStealConfig, skipSubscriptions);
   });
 
   return client;
@@ -213,11 +217,13 @@ function handleWebSocketMessage(
   getValidToken: () => Promise<string>,
   getValidBroadcasterToken: () => Promise<string>,
   botUserId: string,
-  channelUserIds: string[],
+  channelIds: ChannelIds,
   hasBroadcasterTokens: boolean,
   vipStealConfig: VipStealConfig | null,
   skipSubscriptions: boolean,
 ): void {
+  const allChannelIds = [channelIds.primary, ...(channelIds.debug ? [channelIds.debug] : [])];
+
   switch (data.metadata.message_type) {
     case 'session_welcome': {
       const msg = data as SessionWelcomeMessage;
@@ -226,11 +232,11 @@ function handleWebSocketMessage(
         console.log(`Reconnected with session ${sessionId}`);
       } else {
         getValidToken().then((token) =>
-          Promise.all(channelUserIds.map((cid) => registerEventSubListeners(token, sessionId, botUserId, cid))),
+          Promise.all(allChannelIds.map((cid) => registerEventSubListeners(token, sessionId, botUserId, cid))),
         );
         if (hasBroadcasterTokens && vipStealConfig) {
           getValidBroadcasterToken().then((bToken) =>
-            Promise.all(channelUserIds.map((cid) => registerRedemptionListener(bToken, sessionId, cid))),
+            registerRedemptionListener(bToken, sessionId, channelIds.primary),
           );
         }
       }
@@ -240,6 +246,7 @@ function handleWebSocketMessage(
       const msg = data as NotificationMessage;
       if (msg.metadata.subscription_type === 'stream.online') {
         const { broadcaster_user_id, broadcaster_user_name } = (msg as unknown as StreamOnlineMessage).payload.event;
+        if (broadcaster_user_id !== channelIds.primary) break;
         console.log(`STREAM ONLINE #${broadcaster_user_name}`);
         getValidToken().then(async (token) => {
           await sendChatMessage(token, 'shiroi84Foxbop shiroi84Foxbop shiroi84Foxbop', botUserId, broadcaster_user_id);
@@ -250,11 +257,13 @@ function handleWebSocketMessage(
         });
       } else if (msg.metadata.subscription_type === 'stream.offline') {
         const { broadcaster_user_id: offlineBroadcasterId } = (msg as unknown as StreamOfflineMessage).payload.event;
+        if (offlineBroadcasterId !== channelIds.primary) break;
         console.log(`STREAM OFFLINE #${offlineBroadcasterId}`);
         periodicScheduler.stop();
       } else if (msg.metadata.subscription_type === 'channel.chat.message') {
         const { broadcaster_user_id, broadcaster_user_name, chatter_user_name, message, badges } = msg.payload.event;
         const isModerator = badges.some((b) => b.set_id === 'moderator' || b.set_id === 'lead_moderator' || b.set_id === 'broadcaster');
+        const isDebug = broadcaster_user_id === channelIds.debug;
 
         const [commandWord, ...args] = message.text.trim().split(/\s+/);
         if (commandWord.startsWith('!')) {
@@ -263,6 +272,7 @@ function handleWebSocketMessage(
             sender: chatter_user_name,
             args,
             isModerator,
+            isDebug,
             say: async (text) => {
               const token = await getValidToken();
               return sendChatMessage(token, text, botUserId, broadcaster_user_id);

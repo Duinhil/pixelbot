@@ -26,6 +26,32 @@ export function loadVipStealConfig(): VipStealConfig | null {
   }
 }
 
+export async function simulateVipStealRedemption(
+  userLogin: string,
+  config: VipStealConfig,
+): Promise<string> {
+  const already = db
+    .prepare('SELECT user_login FROM vip_steal_holders WHERE user_login = ? COLLATE NOCASE')
+    .get(userLogin);
+  if (already) return `@${userLogin} already holds a real VIP slot.`;
+
+  const { count } = db.prepare('SELECT COUNT(*) as count FROM vip_steal_holders').get() as { count: number };
+  if (count < config.maxVips) {
+    return `Would grant VIP to @${userLogin} (${count + 1}/${config.maxVips} slots used).`;
+  }
+
+  const query =
+    config.stealStrategy === 'fifo'
+      ? 'SELECT user_login, added_at FROM vip_steal_holders ORDER BY added_at ASC LIMIT 1'
+      : 'SELECT user_login, added_at FROM vip_steal_holders ORDER BY RANDOM() LIMIT 1';
+  const victim = db.prepare(query).get() as { user_login: string; added_at: number };
+  const note =
+    config.stealStrategy === 'fifo'
+      ? `(oldest, since ${new Date(victim.added_at).toLocaleDateString()})`
+      : '(randomly selected)';
+  return `Would steal VIP from @${victim.user_login} ${note} and give to @${userLogin}.`;
+}
+
 export async function handleVipStealRedemption(
   redeemerUserId: string,
   redeemerUserLogin: string,
@@ -51,7 +77,7 @@ export async function handleVipStealRedemption(
     db.prepare('INSERT INTO vip_steal_holders (user_id, user_login, added_at) VALUES (?, ?, ?)').run(
       redeemerUserId, redeemerUserLogin, Date.now(),
     );
-    await say(`@${redeemerUserLogin} has been awarded VIP! PogChamp`);
+    await say(`@${redeemerUserLogin} has been awarded VIP! shiroi84Foxbop`);
   } else {
     const query = config.stealStrategy === 'fifo'
       ? 'SELECT user_id, user_login, added_at FROM vip_steal_holders ORDER BY added_at ASC LIMIT 1'
@@ -64,6 +90,6 @@ export async function handleVipStealRedemption(
     db.prepare('INSERT INTO vip_steal_holders (user_id, user_login, added_at) VALUES (?, ?, ?)').run(
       redeemerUserId, redeemerUserLogin, Date.now(),
     );
-    await say(`@${redeemerUserLogin} has stolen VIP from @${victim.user_login}! VoHiYo`);
+    await say(`@${redeemerUserLogin} has stolen VIP from @${victim.user_login}! shiroi84Foxwut`);
   }
 }
