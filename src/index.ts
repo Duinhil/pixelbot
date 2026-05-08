@@ -1,18 +1,29 @@
 import { config } from './config';
-import { getStoredTokens } from './auth/tokenStore';
-import { startAuthServer } from './auth/server';
+import { getStoredTokens, getBroadcasterTokens } from './auth/tokenStore';
+import { startAuthServer, startBroadcasterAuthServer } from './auth/server';
 import { startBot } from './bot';
 
 (async () => {
   const stored = getStoredTokens();
 
+  let botTokens;
   if (stored) {
     console.log('Found stored tokens. Starting bot...');
-    await startBot(stored);
+    botTokens = stored;
   } else {
     console.log('No tokens found. Starting authorization flow...');
     console.log(`Open http://localhost:${config.port}/authorize to begin.`);
-    const tokens = await startAuthServer();
-    await startBot(tokens);
+    botTokens = await startAuthServer();
   }
+
+  let broadcasterTokens = getBroadcasterTokens();
+  if (!broadcasterTokens) {
+    console.log('No broadcaster tokens found. Starting broadcaster authorization...');
+    console.log(`Open http://localhost:${config.port}/authorize-broadcaster to authorize the broadcaster account.`);
+    broadcasterTokens = await startBroadcasterAuthServer();
+  } else {
+    console.log('Found stored broadcaster tokens.');
+  }
+
+  await startBot(botTokens, broadcasterTokens);
 })();

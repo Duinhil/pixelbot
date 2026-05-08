@@ -22,3 +22,19 @@ export function saveTokens(tokens: StoredTokens): void {
       expires_at    = excluded.expires_at
   `).run(tokens.user_id, tokens.access_token, tokens.refresh_token, tokens.expires_at);
 }
+
+export function getBroadcasterTokens(): StoredTokens | undefined {
+  return db.prepare('SELECT user_id, access_token, refresh_token, expires_at FROM broadcaster_tokens WHERE id = 1').get() as StoredTokens | undefined;
+}
+
+export function saveBroadcasterTokens(tokens: StoredTokens): void {
+  db.prepare(`
+    INSERT INTO broadcaster_tokens (id, user_id, access_token, refresh_token, expires_at)
+    VALUES (1, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      user_id       = excluded.user_id,
+      access_token  = excluded.access_token,
+      refresh_token = excluded.refresh_token,
+      expires_at    = excluded.expires_at
+  `).run(tokens.user_id, tokens.access_token, tokens.refresh_token, tokens.expires_at);
+}

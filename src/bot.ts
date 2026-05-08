@@ -1,16 +1,18 @@
 import WebSocket from 'ws';
 import { config } from './config';
-import { StoredTokens, saveTokens } from './auth/tokenStore';
+import { StoredTokens, saveTokens, saveBroadcasterTokens } from './auth/tokenStore';
 import {
   validateToken,
   refreshAccessToken,
   sendChatMessage,
   registerEventSubListeners,
+  registerRedemptionListener,
   lookupUserId,
   isStreamLive,
 } from './twitchApi';
 import { handleCommand } from './commands';
 import { PeriodicMessageScheduler, loadPeriodicMessagesConfig } from './periodicMessages';
+import { loadVipStealConfig, handleVipStealRedemption, VipStealConfig } from './vipSteal';
 
 const periodicScheduler = new PeriodicMessageScheduler(loadPeriodicMessagesConfig());
 
@@ -37,6 +39,28 @@ interface NotificationMessage {
       chatter_user_name: string;
       message: { text: string };
       badges: Array<{ set_id: string }>;
+    };
+  };
+}
+
+interface RedemptionNotificationMessage {
+  metadata: {
+    message_type: 'notification';
+    subscription_type: 'channel.channel_points_custom_reward_redemption.add';
+  };
+  payload: {
+    event: {
+      broadcaster_user_id: string;
+      user_id: string;
+      user_login: string;
+      user_name: string;
+      reward: {
+        id: string;
+        title: string;
+        cost: number;
+        prompt: string;
+      };
+      status: string;
     };
   };
 }
@@ -75,8 +99,9 @@ type EventSubMessage = SessionWelcomeMessage | SessionReconnectMessage | Notific
 
 // --- Bot entry point ---
 
-export async function startBot(initialTokens: StoredTokens): Promise<void> {
+export async function startBot(initialTokens: StoredTokens, initialBroadcasterTokens?: StoredTokens): Promise<void> {
   let tokens = initialTokens;
+  let broadcasterTokens = initialBroadcasterTokens;
 
   async function getValidToken(): Promise<string> {
     if (Date.now() >= tokens.expires_at - 60_000) {
@@ -92,6 +117,30 @@ export async function startBot(initialTokens: StoredTokens): Promise<void> {
       console.log('Token refreshed.');
     }
     return tokens.access_token;
+  }
+
+  async function getValidBroadcasterToken(): Promise<string> {
+    if (!broadcasterTokens) throw new Error('No broadcaster tokens available');
+    if (Date.now() >= broadcasterTokens.expires_at - 60_000) {
+      console.log('Broadcaster token expiring soon, refreshing...');
+      const refreshed = await refreshAccessToken(broadcasterTokens.refresh_token);
+      broadcasterTokens = {
+        ...broadcasterTokens,
+        access_token: refreshed.access_token,
+        refresh_token: refreshed.refresh_token,
+        expires_at: Date.now() + refreshed.expires_in * 1000,
+      };
+      saveBroadcasterTokens(broadcasterTokens);
+      console.log('Broadcaster token refreshed.');
+    }
+    return broadcasterTokens.access_token;
+  }
+
+  const vipStealConfig: VipStealConfig | null = loadVipStealConfig();
+  if (vipStealConfig && broadcasterTokens) {
+    console.log(`VIP steal enabled: reward="${vipStealConfig.rewardName}", max=${vipStealConfig.maxVips}, strategy=${vipStealConfig.stealStrategy}`);
+  } else if (vipStealConfig && !broadcasterTokens) {
+    console.log('vip-steal.json found but no broadcaster tokens — VIP steal disabled. Run with broadcaster auth to enable.');
   }
 
   const accessToken = await getValidToken();
@@ -113,15 +162,18 @@ export async function startBot(initialTokens: StoredTokens): Promise<void> {
     }
   }
 
-  startWebSocketClient(getValidToken, tokens.user_id, channelUserIds);
+  startWebSocketClient(getValidToken, getValidBroadcasterToken, tokens.user_id, channelUserIds, !!broadcasterTokens, vipStealConfig);
 }
 
 // --- WebSocket ---
 
 function startWebSocketClient(
   getValidToken: () => Promise<string>,
+  getValidBroadcasterToken: () => Promise<string>,
   botUserId: string,
   channelUserIds: string[],
+  hasBroadcasterTokens: boolean,
+  vipStealConfig: VipStealConfig | null,
   url: string = EVENTSUB_WEBSOCKET_URL,
   skipSubscriptions: boolean = false,
 ): WebSocket {
@@ -137,7 +189,7 @@ function startWebSocketClient(
   client.on('close', (code, reason) => {
     if (reconnecting) return;
     console.log(`WebSocket closed (${code}: ${reason ?? 'unknown'}). Reconnecting in 5s...`);
-    setTimeout(() => startWebSocketClient(getValidToken, botUserId, channelUserIds), 5_000);
+    setTimeout(() => startWebSocketClient(getValidToken, getValidBroadcasterToken, botUserId, channelUserIds, hasBroadcasterTokens, vipStealConfig), 5_000);
   });
 
   client.on('message', (data) => {
@@ -146,11 +198,11 @@ function startWebSocketClient(
       const reconnectUrl = (msg as SessionReconnectMessage).payload.session.reconnect_url;
       console.log(`Received session_reconnect, moving to ${reconnectUrl}`);
       reconnecting = true;
-      startWebSocketClient(getValidToken, botUserId, channelUserIds, reconnectUrl, true);
+      startWebSocketClient(getValidToken, getValidBroadcasterToken, botUserId, channelUserIds, hasBroadcasterTokens, vipStealConfig, reconnectUrl, true);
       client.close();
       return;
     }
-    handleWebSocketMessage(msg, getValidToken, botUserId, channelUserIds, skipSubscriptions);
+    handleWebSocketMessage(msg, getValidToken, getValidBroadcasterToken, botUserId, channelUserIds, hasBroadcasterTokens, vipStealConfig, skipSubscriptions);
   });
 
   return client;
@@ -159,8 +211,11 @@ function startWebSocketClient(
 function handleWebSocketMessage(
   data: EventSubMessage,
   getValidToken: () => Promise<string>,
+  getValidBroadcasterToken: () => Promise<string>,
   botUserId: string,
   channelUserIds: string[],
+  hasBroadcasterTokens: boolean,
+  vipStealConfig: VipStealConfig | null,
   skipSubscriptions: boolean,
 ): void {
   switch (data.metadata.message_type) {
@@ -173,6 +228,11 @@ function handleWebSocketMessage(
         getValidToken().then((token) =>
           Promise.all(channelUserIds.map((cid) => registerEventSubListeners(token, sessionId, botUserId, cid))),
         );
+        if (hasBroadcasterTokens && vipStealConfig) {
+          getValidBroadcasterToken().then((bToken) =>
+            Promise.all(channelUserIds.map((cid) => registerRedemptionListener(bToken, sessionId, cid))),
+          );
+        }
       }
       break;
     }
@@ -189,8 +249,8 @@ function handleWebSocketMessage(
           });
         });
       } else if (msg.metadata.subscription_type === 'stream.offline') {
-        const { broadcaster_user_name } = (msg as unknown as StreamOfflineMessage).payload.event;
-        console.log(`STREAM OFFLINE #${broadcaster_user_name}`);
+        const { broadcaster_user_id: offlineBroadcasterId } = (msg as unknown as StreamOfflineMessage).payload.event;
+        console.log(`STREAM OFFLINE #${offlineBroadcasterId}`);
         periodicScheduler.stop();
       } else if (msg.metadata.subscription_type === 'channel.chat.message') {
         const { broadcaster_user_id, broadcaster_user_name, chatter_user_name, message, badges } = msg.payload.event;
@@ -210,6 +270,21 @@ function handleWebSocketMessage(
             getToken: getValidToken,
           });
         }
+      } else if (msg.metadata.subscription_type === 'channel.channel_points_custom_reward_redemption.add' && vipStealConfig) {
+        const redemption = (msg as unknown as RedemptionNotificationMessage).payload.event;
+        console.log(`Channel point redemption: "${redemption.reward.title}" by ${redemption.user_login}`);
+        handleVipStealRedemption(
+          redemption.user_id,
+          redemption.user_login,
+          redemption.reward.title,
+          redemption.broadcaster_user_id,
+          getValidBroadcasterToken,
+          async (text) => {
+            const token = await getValidToken();
+            return sendChatMessage(token, text, botUserId, redemption.broadcaster_user_id);
+          },
+          vipStealConfig,
+        ).catch((err) => console.error('VIP steal handler error:', err));
       }
       break;
     }

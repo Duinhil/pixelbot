@@ -176,6 +176,71 @@ export async function isStreamLive(broadcasterId: string, accessToken: string): 
   return data.data.length > 0;
 }
 
+export async function addVip(broadcasterId: string, userId: string, accessToken: string): Promise<void> {
+  const response = await fetch(
+    `https://api.twitch.tv/helix/channels/vips?broadcaster_id=${encodeURIComponent(broadcasterId)}&user_id=${encodeURIComponent(userId)}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Client-Id': config.clientId,
+      },
+    },
+  );
+  if (response.status !== 204) {
+    const data = await response.json();
+    console.error(`Failed to add VIP for user ${userId}:`, data);
+  }
+}
+
+export async function removeVip(broadcasterId: string, userId: string, accessToken: string): Promise<void> {
+  const response = await fetch(
+    `https://api.twitch.tv/helix/channels/vips?broadcaster_id=${encodeURIComponent(broadcasterId)}&user_id=${encodeURIComponent(userId)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Client-Id': config.clientId,
+      },
+    },
+  );
+  if (response.status !== 204) {
+    const data = await response.json();
+    console.error(`Failed to remove VIP for user ${userId}:`, data);
+  }
+}
+
+export async function registerRedemptionListener(broadcasterToken: string, sessionId: string, broadcasterId: string): Promise<void> {
+  const response = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${broadcasterToken}`,
+      'Client-Id': config.clientId,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      type: 'channel.channel_points_custom_reward_redemption.add',
+      version: '1',
+      condition: {
+        broadcaster_user_id: broadcasterId,
+      },
+      transport: {
+        method: 'websocket',
+        session_id: sessionId,
+      },
+    }),
+  });
+
+  if (response.status !== 202) {
+    const data = await response.json();
+    console.error('Failed to subscribe to channel.channel_points_custom_reward_redemption.add. Status:', response.status);
+    console.error(data);
+  } else {
+    const data = await response.json() as { data: Array<{ id: string }> };
+    console.log(`Subscribed to channel.channel_points_custom_reward_redemption.add [${data.data[0].id}]`);
+  }
+}
+
 export async function registerEventSubListeners(accessToken: string, sessionId: string, botUserId: string, channelUserId: string): Promise<void> {
   const response = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
     method: 'POST',

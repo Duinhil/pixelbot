@@ -2,21 +2,30 @@ import express from 'express';
 import crypto from 'crypto';
 import { config } from '../config';
 import { exchangeCode, validateToken } from '../twitchApi';
-import { StoredTokens, saveTokens } from './tokenStore';
+import { StoredTokens, saveTokens, saveBroadcasterTokens } from './tokenStore';
 
-export function startAuthServer(): Promise<StoredTokens> {
+type AuthType = 'bot' | 'broadcaster';
+
+interface StatePayload {
+  nonce: string;
+  type: AuthType;
+}
+
+function startAuthServerForType(type: AuthType, scope: string): Promise<StoredTokens> {
   return new Promise((resolve, reject) => {
     const app = express();
-    let stateToken: string | undefined;
+    let statePayload: StatePayload | undefined;
 
-    app.get('/authorize', (_req, res) => {
-      stateToken = crypto.randomBytes(16).toString('hex');
+    const authRoute = type === 'bot' ? '/authorize' : '/authorize-broadcaster';
+
+    app.get(authRoute, (_req, res) => {
+      statePayload = { nonce: crypto.randomBytes(16).toString('hex'), type };
       const params = new URLSearchParams({
         client_id: config.clientId,
         redirect_uri: config.redirectUri,
         response_type: 'code',
-        scope: 'user:bot user:read:chat user:write:chat',
-        state: stateToken,
+        scope,
+        state: JSON.stringify(statePayload),
       });
       res.redirect(`https://id.twitch.tv/oauth2/authorize?${params}`);
     });
@@ -30,7 +39,16 @@ export function startAuthServer(): Promise<StoredTokens> {
         return;
       }
 
-      if (!stateToken || state !== stateToken) {
+      let parsed: StatePayload;
+      try {
+        parsed = JSON.parse(state) as StatePayload;
+      } catch {
+        res.status(400).send('Invalid state parameter.');
+        reject(new Error('State parse failed'));
+        return;
+      }
+
+      if (!statePayload || parsed.nonce !== statePayload.nonce || parsed.type !== type) {
         res.status(400).send('Invalid state parameter.');
         reject(new Error('State mismatch — possible CSRF attempt'));
         return;
@@ -39,7 +57,6 @@ export function startAuthServer(): Promise<StoredTokens> {
       try {
         const tokenResponse = await exchangeCode(code);
         const expires_at = Date.now() + tokenResponse.expires_in * 1000;
-
         const validateData = await validateToken(tokenResponse.access_token);
 
         const stored: StoredTokens = {
@@ -49,8 +66,13 @@ export function startAuthServer(): Promise<StoredTokens> {
           expires_at,
         };
 
-        saveTokens(stored);
-        res.send('Authorization successful — you can close this tab. The bot is starting.');
+        if (type === 'bot') {
+          saveTokens(stored);
+        } else {
+          saveBroadcasterTokens(stored);
+        }
+
+        res.send('Authorization successful — you can close this tab.');
         server.close();
         resolve(stored);
       } catch (err) {
@@ -61,9 +83,17 @@ export function startAuthServer(): Promise<StoredTokens> {
 
     const server = app.listen(config.port, () => {
       console.log(`Auth server listening on http://localhost:${config.port}`);
-      console.log(`Open http://localhost:${config.port}/authorize to authorize the bot.`);
+      console.log(`Open http://localhost:${config.port}${authRoute} to authorize.`);
     });
 
     server.on('error', reject);
   });
+}
+
+export function startAuthServer(): Promise<StoredTokens> {
+  return startAuthServerForType('bot', 'user:bot user:read:chat user:write:chat');
+}
+
+export function startBroadcasterAuthServer(): Promise<StoredTokens> {
+  return startAuthServerForType('broadcaster', 'channel:read:redemptions channel:manage:vips');
 }
