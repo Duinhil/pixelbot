@@ -236,7 +236,7 @@ function handleWebSocketMessage(
         getValidToken().then((token) =>
           Promise.all(allChannelIds.map((cid) => registerEventSubListeners(token, sessionId, botUserId, cid))),
         );
-        if (hasBroadcasterTokens && vipStealConfig?.enabled) {
+        if (hasBroadcasterTokens && vipStealConfig) {
           getValidBroadcasterToken().then((bToken) =>
             registerRedemptionListener(bToken, sessionId, channelIds.primary),
           );
@@ -286,9 +286,10 @@ function handleWebSocketMessage(
             getToken: getValidToken,
           });
         }
-      } else if (msg.metadata.subscription_type === 'channel.channel_points_custom_reward_redemption.add' && vipStealConfig?.enabled) {
+      } else if (msg.metadata.subscription_type === 'channel.channel_points_custom_reward_redemption.add' && vipStealConfig) {
         const redemption = (msg as unknown as RedemptionNotificationMessage).payload.event;
         console.log(`Channel point redemption: "${redemption.reward.title}" by ${redemption.user_login}`);
+        if (!vipStealConfig.enabled) break;
         handleVipStealRedemption(
           redemption.user_id,
           redemption.user_login,
