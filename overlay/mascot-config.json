@@ -1,0 +1,18 @@
+{
+  "position": { "x": "80%", "y": "70%" },
+  "idleTimeoutMs": 15000,
+  "states": {
+    "enter": { "clip": "enter", "loop": false, "durationMs": 1000 },
+    "idle":  { "clip": "idle",  "loop": true,  "durationMs": 500  },
+    "exit":  { "clip": "exit",  "loop": false, "durationMs": 1000 },
+    "dance": { "clip": "dance", "loop": false, "durationMs": 3000 },
+    "wave":  { "clip": "wave",  "loop": false, "durationMs": 2000 }
+  },
+  "commands": {
+    "dance": "dance",
+    "wave": "wave"
+  },
+  "redemptions": {
+    "reward-id-placeholder": "dance"
+  }
+}

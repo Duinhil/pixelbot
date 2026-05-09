@@ -9,6 +9,7 @@ export interface EmoteRef {
 
 export type OverlayEvent =
   | { type: 'chat.message';   ts: number; sender: string; text: string; emotes: EmoteRef[] }
+  | { type: 'command';        ts: number; command: string; args: string[]; sender: string }
   | { type: 'stream.online';  ts: number; broadcasterName: string }
   | { type: 'stream.offline'; ts: number; broadcasterName: string }
   | { type: 'redemption';     ts: number; rewardId: string; rewardTitle: string; userId: string; userLogin: string; userInput: string }

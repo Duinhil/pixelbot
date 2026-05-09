@@ -205,6 +205,7 @@ export async function startBot(initialTokens: StoredTokens, initialBroadcasterTo
 
         const [commandWord, ...args] = message.text.trim().split(/\s+/);
         if (commandWord.startsWith('!')) {
+          emitOverlayEvent({ type: 'command', ts: Date.now(), command: commandWord.slice(1), args, sender: chatter_user_name });
           handleCommand(commandWord.slice(1), {
             sender: chatter_user_name,
             args,

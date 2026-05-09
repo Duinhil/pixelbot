@@ -14,10 +14,29 @@ export function startOverlayServer(): void {
     if (url.pathname === '/overlay' || url.pathname === '/overlay/') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
-    } else {
-      res.writeHead(404);
-      res.end('Not found');
+      return;
     }
+
+    const mimeTypes: Record<string, string> = {
+      '.js':   'text/javascript',
+      '.json': 'application/json',
+      '.png':  'image/png',
+      '.webp': 'image/webp',
+    };
+    const ext = path.extname(url.pathname);
+    const mime = mimeTypes[ext];
+    if (mime) {
+      const filePath = path.join(__dirname, '..', 'overlay', path.basename(url.pathname));
+      fs.readFile(filePath, (err, data) => {
+        if (err) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'Content-Type': mime });
+        res.end(data);
+      });
+      return;
+    }
+
+    res.writeHead(404);
+    res.end('Not found');
   });
 
   const wss = new WebSocketServer({ server });
