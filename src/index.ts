@@ -1,6 +1,6 @@
 import { config } from './config';
-import { getStoredTokens, getBroadcasterTokens } from './auth/tokenStore';
-import { startAuthServer, startBroadcasterAuthServer } from './auth/server';
+import { getStoredTokens, getBroadcasterTokens, getDebugBroadcasterTokens } from './auth/tokenStore';
+import { startAuthServer, startBroadcasterAuthServer, startDebugBroadcasterAuthServer } from './auth/server';
 import { startBot } from './bot';
 import { startWebhookServer } from './webhookServer';
 import {
@@ -35,6 +35,17 @@ import { loadVipStealConfig } from './vipSteal';
     broadcasterTokens = await startBroadcasterAuthServer();
   } else {
     console.log('Found stored broadcaster tokens.');
+  }
+
+  // Debug broadcaster OAuth (one-time, only needed when DEBUG_CHANNEL is configured)
+  if (config.debugChannel) {
+    if (!getDebugBroadcasterTokens()) {
+      console.log(`Debug channel configured but not yet authorized.`);
+      console.log(`Open http://localhost:${config.port}/authorize-debug-broadcaster and log in as the ${config.debugChannel} broadcaster.`);
+      await startDebugBroadcasterAuthServer();
+    } else {
+      console.log('Found stored debug broadcaster tokens.');
+    }
   }
 
   // Webhook server must be running before subscriptions are registered
@@ -80,14 +91,12 @@ import { loadVipStealConfig } from './vipSteal';
   // Register webhook subscriptions
   const appToken = await getValidAppToken();
   for (const channelId of allChannelIds) {
-    const isDebug = channelId !== primaryChannelId;
     await registerWebhookEventSubListeners(
       appToken,
       botUserId,
       channelId,
       config.webhookCallbackUrl,
       config.webhookSecret,
-      isDebug ? botTokens.access_token : undefined,
     );
   }
 

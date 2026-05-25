@@ -2,9 +2,9 @@ import express from 'express';
 import crypto from 'crypto';
 import { config } from '../config';
 import { exchangeCode, validateToken } from '../twitchApi';
-import { StoredTokens, saveTokens, saveBroadcasterTokens } from './tokenStore';
+import { StoredTokens, saveTokens, saveBroadcasterTokens, saveDebugBroadcasterTokens } from './tokenStore';
 
-type AuthType = 'bot' | 'broadcaster';
+type AuthType = 'bot' | 'broadcaster' | 'debug_broadcaster';
 
 interface StatePayload {
   nonce: string;
@@ -16,7 +16,7 @@ function startAuthServerForType(type: AuthType, scope: string): Promise<StoredTo
     const app = express();
     let statePayload: StatePayload | undefined;
 
-    const authRoute = type === 'bot' ? '/authorize' : '/authorize-broadcaster';
+    const authRoute = type === 'bot' ? '/authorize' : type === 'broadcaster' ? '/authorize-broadcaster' : '/authorize-debug-broadcaster';
 
     app.get(authRoute, (_req, res) => {
       statePayload = { nonce: crypto.randomBytes(16).toString('hex'), type };
@@ -68,8 +68,10 @@ function startAuthServerForType(type: AuthType, scope: string): Promise<StoredTo
 
         if (type === 'bot') {
           saveTokens(stored);
-        } else {
+        } else if (type === 'broadcaster') {
           saveBroadcasterTokens(stored);
+        } else {
+          saveDebugBroadcasterTokens(stored);
         }
 
         res.send('Authorization successful — you can close this tab.');
@@ -96,4 +98,8 @@ export function startAuthServer(): Promise<StoredTokens> {
 
 export function startBroadcasterAuthServer(): Promise<StoredTokens> {
   return startAuthServerForType('broadcaster', 'channel:bot channel:read:redemptions channel:manage:vips');
+}
+
+export function startDebugBroadcasterAuthServer(): Promise<StoredTokens> {
+  return startAuthServerForType('debug_broadcaster', 'channel:bot');
 }

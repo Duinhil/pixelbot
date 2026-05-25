@@ -22,6 +22,14 @@ db.exec(`
     expires_at    INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS debug_broadcaster_tokens (
+    id            INTEGER PRIMARY KEY CHECK (id = 1),
+    user_id       TEXT NOT NULL,
+    access_token  TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
+    expires_at    INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS counters (
     name  TEXT PRIMARY KEY,
     value INTEGER NOT NULL DEFAULT 0
