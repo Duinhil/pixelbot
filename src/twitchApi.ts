@@ -102,6 +102,74 @@ export async function exchangeCode(code: string): Promise<TokenResponse> {
   return response.json() as Promise<TokenResponse>;
 }
 
+export async function getAppAccessToken(): Promise<{ access_token: string; expires_in: number }> {
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    grant_type: 'client_credentials',
+  });
+
+  const response = await fetch('https://id.twitch.tv/oauth2/token', {
+    method: 'POST',
+    body: params,
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(`App access token fetch failed: ${JSON.stringify(err)}`);
+  }
+
+  const data = await response.json() as { access_token: string; expires_in: number };
+  console.log('Fetched app access token.');
+  return data;
+}
+
+export interface EventSubSubscription {
+  id: string;
+  type: string;
+  status: string;
+  transport: { method: string; callback?: string };
+}
+
+export async function listEventSubSubscriptions(
+  appToken: string,
+  cursor?: string,
+): Promise<{ data: EventSubSubscription[]; pagination: { cursor?: string } }> {
+  const url = new URL('https://api.twitch.tv/helix/eventsub/subscriptions');
+  if (cursor) url.searchParams.set('after', cursor);
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${appToken}`,
+      'Client-Id': config.clientId,
+    },
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(`listEventSubSubscriptions failed: ${JSON.stringify(err)}`);
+  }
+
+  return response.json() as Promise<{ data: EventSubSubscription[]; pagination: { cursor?: string } }>;
+}
+
+export async function deleteEventSubSubscription(appToken: string, id: string): Promise<void> {
+  const response = await fetch(
+    `https://api.twitch.tv/helix/eventsub/subscriptions?id=${encodeURIComponent(id)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${appToken}`,
+        'Client-Id': config.clientId,
+      },
+    },
+  );
+
+  if (response.status !== 204) {
+    console.error(`Failed to delete subscription ${id}: HTTP ${response.status}`);
+  }
+}
+
 export async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> {
   const params = new URLSearchParams({
     client_id: config.clientId,
@@ -210,7 +278,50 @@ export async function removeVip(broadcasterId: string, userId: string, accessTok
   }
 }
 
-export async function registerRedemptionListener(broadcasterToken: string, sessionId: string, broadcasterId: string): Promise<void> {
+export async function registerWebhookEventSubListeners(
+  appToken: string,
+  botUserId: string,
+  channelUserId: string,
+  callbackUrl: string,
+  secret: string,
+): Promise<void> {
+  const transport = { method: 'webhook', callback: callbackUrl, secret };
+
+  const subscriptions = [
+    { type: 'channel.chat.message', version: '1', condition: { broadcaster_user_id: channelUserId, user_id: botUserId } },
+    { type: 'stream.online', version: '1', condition: { broadcaster_user_id: channelUserId } },
+    { type: 'stream.offline', version: '1', condition: { broadcaster_user_id: channelUserId } },
+  ];
+
+  for (const sub of subscriptions) {
+    const response = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${appToken}`,
+        'Client-Id': config.clientId,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ...sub, transport }),
+    });
+
+    if (response.status !== 202) {
+      const data = await response.json();
+      console.error(`Failed to subscribe to ${sub.type}. Status:`, response.status);
+      console.error(data);
+      process.exit(1);
+    } else {
+      const data = await response.json() as { data: Array<{ id: string }> };
+      console.log(`Subscribed to ${sub.type} [${data.data[0].id}]`);
+    }
+  }
+}
+
+export async function registerWebhookRedemptionListener(
+  broadcasterToken: string,
+  broadcasterId: string,
+  callbackUrl: string,
+  secret: string,
+): Promise<void> {
   const response = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
     method: 'POST',
     headers: {
@@ -221,13 +332,8 @@ export async function registerRedemptionListener(broadcasterToken: string, sessi
     body: JSON.stringify({
       type: 'channel.channel_points_custom_reward_redemption.add',
       version: '1',
-      condition: {
-        broadcaster_user_id: broadcasterId,
-      },
-      transport: {
-        method: 'websocket',
-        session_id: sessionId,
-      },
+      condition: { broadcaster_user_id: broadcasterId },
+      transport: { method: 'webhook', callback: callbackUrl, secret },
     }),
   });
 
@@ -238,98 +344,5 @@ export async function registerRedemptionListener(broadcasterToken: string, sessi
   } else {
     const data = await response.json() as { data: Array<{ id: string }> };
     console.log(`Subscribed to channel.channel_points_custom_reward_redemption.add [${data.data[0].id}]`);
-  }
-}
-
-export async function registerEventSubListeners(accessToken: string, sessionId: string, botUserId: string, channelUserId: string): Promise<void> {
-  const response = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Client-Id': config.clientId,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      type: 'channel.chat.message',
-      version: '1',
-      condition: {
-        broadcaster_user_id: channelUserId,
-        user_id: botUserId,
-      },
-      transport: {
-        method: 'websocket',
-        session_id: sessionId,
-      },
-    }),
-  });
-
-  if (response.status !== 202) {
-    const data = await response.json();
-    console.error('Failed to subscribe to channel.chat.message. Status:', response.status);
-    console.error(data);
-    process.exit(1);
-  } else {
-    const data = await response.json() as { data: Array<{ id: string }> };
-    console.log(`Subscribed to channel.chat.message [${data.data[0].id}]`);
-  }
-
-  const onlineResponse = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Client-Id': config.clientId,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      type: 'stream.online',
-      version: '1',
-      condition: {
-        broadcaster_user_id: channelUserId,
-      },
-      transport: {
-        method: 'websocket',
-        session_id: sessionId,
-      },
-    }),
-  });
-
-  if (onlineResponse.status !== 202) {
-    const data = await onlineResponse.json();
-    console.error('Failed to subscribe to stream.online. Status:', onlineResponse.status);
-    console.error(data);
-    process.exit(1);
-  } else {
-    const data = await onlineResponse.json() as { data: Array<{ id: string }> };
-    console.log(`Subscribed to stream.online [${data.data[0].id}]`);
-  }
-
-  const offlineResponse = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Client-Id': config.clientId,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      type: 'stream.offline',
-      version: '1',
-      condition: {
-        broadcaster_user_id: channelUserId,
-      },
-      transport: {
-        method: 'websocket',
-        session_id: sessionId,
-      },
-    }),
-  });
-
-  if (offlineResponse.status !== 202) {
-    const data = await offlineResponse.json();
-    console.error('Failed to subscribe to stream.offline. Status:', offlineResponse.status);
-    console.error(data);
-    process.exit(1);
-  } else {
-    const data = await offlineResponse.json() as { data: Array<{ id: string }> };
-    console.log(`Subscribed to stream.offline [${data.data[0].id}]`);
   }
 }

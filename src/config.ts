@@ -7,6 +7,8 @@ interface Config {
   port: number;
   chatChannel: string;         // primary channel login, resolved to user ID at startup
   debugChannel: string | null; // optional testing channel login
+  webhookSecret: string;
+  webhookCallbackUrl: string;
 }
 
 function requireEnv(name: string): string {
@@ -22,4 +24,6 @@ export const config: Config = {
   port: parseInt(process.env['PORT'] ?? '3000', 10),
   chatChannel: requireEnv('CHAT_CHANNEL'),
   debugChannel: process.env['DEBUG_CHANNEL']?.trim() || null,
+  webhookSecret: requireEnv('WEBHOOK_SECRET'),
+  webhookCallbackUrl: requireEnv('WEBHOOK_CALLBACK_URL'),
 };
