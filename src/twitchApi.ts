@@ -284,24 +284,26 @@ export async function registerWebhookEventSubListeners(
   channelUserId: string,
   callbackUrl: string,
   secret: string,
+  chatMessageToken?: string,
 ): Promise<void> {
   const transport = { method: 'webhook', callback: callbackUrl, secret };
 
   const subscriptions = [
-    { type: 'channel.chat.message', version: '1', condition: { broadcaster_user_id: channelUserId, user_id: botUserId } },
-    { type: 'stream.online', version: '1', condition: { broadcaster_user_id: channelUserId } },
-    { type: 'stream.offline', version: '1', condition: { broadcaster_user_id: channelUserId } },
+    { type: 'channel.chat.message', version: '1', condition: { broadcaster_user_id: channelUserId, user_id: botUserId }, token: chatMessageToken ?? appToken },
+    { type: 'stream.online', version: '1', condition: { broadcaster_user_id: channelUserId }, token: appToken },
+    { type: 'stream.offline', version: '1', condition: { broadcaster_user_id: channelUserId }, token: appToken },
   ];
 
   for (const sub of subscriptions) {
+    const { token, ...subBody } = sub;
     const response = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${appToken}`,
+        Authorization: `Bearer ${token}`,
         'Client-Id': config.clientId,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ ...sub, transport }),
+      body: JSON.stringify({ ...subBody, transport }),
     });
 
     if (response.status !== 202) {

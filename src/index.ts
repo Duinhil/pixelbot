@@ -80,12 +80,14 @@ import { loadVipStealConfig } from './vipSteal';
   // Register webhook subscriptions
   const appToken = await getValidAppToken();
   for (const channelId of allChannelIds) {
+    const isDebug = channelId !== primaryChannelId;
     await registerWebhookEventSubListeners(
       appToken,
       botUserId,
       channelId,
       config.webhookCallbackUrl,
       config.webhookSecret,
+      isDebug ? botTokens.access_token : undefined,
     );
   }
 
