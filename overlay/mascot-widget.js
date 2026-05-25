@@ -1,26 +1,18 @@
 // --- MascotRenderer ---
-// Stub renderer: displays clip name as text and fires onComplete after durationMs.
-// Replace the body of play() with real spritesheet / frame / Lottie logic when assets exist.
+// Image renderer: loads /{clipName}.svg and displays it for durationMs.
+// Replace play() with real spritesheet / frame / Lottie logic when final assets exist.
 
 class MascotRenderer {
   constructor(container) {
-    this._el = document.createElement('div');
-    this._el.style.cssText = [
-      'display:none',
-      'padding:4px 8px',
-      'background:rgba(0,0,0,0.6)',
-      'color:#fff',
-      'font:bold 14px monospace',
-      'border-radius:4px',
-      'white-space:nowrap',
-    ].join(';');
+    this._el = document.createElement('img');
+    this._el.style.cssText = 'display:none; width:200px; height:200px;';
     container.appendChild(this._el);
     this._timer = null;
   }
 
   play(clipName, loop, durationMs, onComplete) {
     this._cancel();
-    this._el.textContent = `[mascot: ${clipName}]`;
+    this._el.src = `/${clipName}.svg`;
     this._el.style.display = 'block';
     if (!loop) {
       this._timer = setTimeout(onComplete, durationMs);

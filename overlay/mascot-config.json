@@ -5,14 +5,10 @@
     "enter": { "clip": "enter", "loop": false, "durationMs": 1000 },
     "idle":  { "clip": "idle",  "loop": true,  "durationMs": 500  },
     "exit":  { "clip": "exit",  "loop": false, "durationMs": 1000 },
-    "dance": { "clip": "dance", "loop": false, "durationMs": 3000 },
-    "wave":  { "clip": "wave",  "loop": false, "durationMs": 2000 }
+    "pet":   { "clip": "pet",   "loop": false, "durationMs": 3000 }
   },
   "commands": {
-    "dance": "dance",
-    "wave": "wave"
+    "pet": "pet"
   },
-  "redemptions": {
-    "reward-id-placeholder": "dance"
-  }
+  "redemptions": {}
 }

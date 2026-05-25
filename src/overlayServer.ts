@@ -22,6 +22,7 @@ export function startOverlayServer(): void {
       '.json': 'application/json',
       '.png':  'image/png',
       '.webp': 'image/webp',
+      '.svg':  'image/svg+xml',
     };
     const ext = path.extname(url.pathname);
     const mime = mimeTypes[ext];
