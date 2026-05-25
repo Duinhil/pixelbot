@@ -210,6 +210,8 @@ export async function startBot(initialTokens: StoredTokens, initialBroadcasterTo
               return sendChatMessage(token, text, tokens.user_id, broadcaster_user_id);
             },
             getToken: getValidToken,
+            getBroadcasterToken: broadcasterTokens ? getValidBroadcasterToken : undefined,
+            primaryBroadcasterId: primaryChannelId,
           });
         }
       }

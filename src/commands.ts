@@ -1,15 +1,17 @@
 import { incrementCount } from './counters';
-import { lookupUserId, getChannelInfo } from './twitchApi';
+import { lookupUserId, getChannelInfo, addVip, removeVip } from './twitchApi';
 import { loadVipStealConfig, simulateVipStealRedemption } from './vipSteal';
 import { fakeVipSimulator } from './vipStealSimulator';
 
 export interface CommandContext {
-  sender: string;                          // chatter's display name
-  args: string[];                          // words after the command
-  isModerator: boolean;                    // true for mods and the broadcaster
-  isDebug: boolean;                        // true when the message is from the debug channel
-  say: (text: string) => Promise<boolean>; // send a message to the channel
-  getToken: () => Promise<string>;         // resolve a valid access token
+  sender: string;                                        // chatter's display name
+  args: string[];                                        // words after the command
+  isModerator: boolean;                                  // true for mods and the broadcaster
+  isDebug: boolean;                                      // true when the message is from the debug channel
+  say: (text: string) => Promise<boolean>;               // send a message to the channel
+  getToken: () => Promise<string>;                       // resolve a valid bot access token
+  getBroadcasterToken?: () => Promise<string>;           // resolve a valid broadcaster access token
+  primaryBroadcasterId?: string;                         // user ID of the primary channel
 }
 
 type CommandHandler = (ctx: CommandContext) => Promise<boolean | void> | void;
@@ -250,6 +252,22 @@ const commands: Record<string, CommandDefinition> = {
       if (!vipConfig) return say('VIP steal is not configured.');
       const result = await simulateVipStealRedemption(target, vipConfig);
       return say(result);
+    },
+  },
+
+  viptest: {
+    debugOnly: true,
+    handler: async ({ args, say, getBroadcasterToken, primaryBroadcasterId, getToken }) => {
+      if (!getBroadcasterToken || !primaryBroadcasterId) return say('Broadcaster token not available.');
+      const target = args[0]?.replace(/^@/, '');
+      if (!target) return say('Usage: !viptest <username>');
+      const user = await lookupUserId(target, await getToken()).catch(() => null);
+      if (!user) return say(`Could not find user "${target}".`);
+      const bToken = await getBroadcasterToken();
+      await addVip(primaryBroadcasterId, user.id, bToken);
+      await new Promise((r) => setTimeout(r, 1000));
+      await removeVip(primaryBroadcasterId, user.id, bToken);
+      return say(`VIP add→remove cycle completed for ${user.displayName} — check console for any API errors.`);
     },
   },
 
