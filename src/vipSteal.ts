@@ -11,12 +11,6 @@ export interface VipStealConfig {
   vipDurationDays: number;
 }
 
-interface VipHolder {
-  user_id: string;
-  user_login: string;
-  added_at: number;
-}
-
 export function loadVipStealConfig(): VipStealConfig | null {
   const configPath = path.join(__dirname, '..', 'vip-steal.json');
   if (!fs.existsSync(configPath)) return null;
@@ -52,6 +46,16 @@ export async function simulateVipStealRedemption(
       ? `(oldest, since ${new Date(victim.added_at).toLocaleDateString()})`
       : '(randomly selected)';
   return `Would steal VIP from @${victim.user_login} ${note} and give to @${userLogin}.`;
+}
+
+export interface VipHolder {
+  user_id: string;
+  user_login: string;
+  added_at: number;
+}
+
+export function getVipHolders(): VipHolder[] {
+  return db.prepare('SELECT user_id, user_login, added_at FROM vip_steal_holders ORDER BY added_at ASC').all() as VipHolder[];
 }
 
 export async function expireVipHolders(

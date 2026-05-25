@@ -1,6 +1,6 @@
 import { incrementCount } from './counters';
-import { lookupUserId, getChannelInfo, addVip, removeVip } from './twitchApi';
-import { loadVipStealConfig, simulateVipStealRedemption } from './vipSteal';
+import { lookupUserId, getChannelInfo } from './twitchApi';
+import { loadVipStealConfig, simulateVipStealRedemption, getVipHolders } from './vipSteal';
 import { fakeVipSimulator } from './vipStealSimulator';
 
 export interface CommandContext {
@@ -255,19 +255,20 @@ const commands: Record<string, CommandDefinition> = {
     },
   },
 
-  viptest: {
+  viplist: {
     debugOnly: true,
-    handler: async ({ args, say, getBroadcasterToken, primaryBroadcasterId, getToken }) => {
-      if (!getBroadcasterToken || !primaryBroadcasterId) return say('Broadcaster token not available.');
-      const target = args[0]?.replace(/^@/, '');
-      if (!target) return say('Usage: !viptest <username>');
-      const user = await lookupUserId(target, await getToken()).catch(() => null);
-      if (!user) return say(`Could not find user "${target}".`);
-      const bToken = await getBroadcasterToken();
-      await addVip(primaryBroadcasterId, user.id, bToken);
-      await new Promise((r) => setTimeout(r, 1000));
-      await removeVip(primaryBroadcasterId, user.id, bToken);
-      return say(`VIP add→remove cycle completed for ${user.displayName} — check console for any API errors.`);
+    handler: ({ say }) => {
+      const vipConfig = loadVipStealConfig();
+      const holders = getVipHolders();
+      if (holders.length === 0) return say(`No VIP steal holders (0/${vipConfig?.maxVips ?? '?'}).`);
+      const list = holders.map((h) => {
+        const date = new Date(h.added_at);
+        const d = String(date.getDate()).padStart(2, '0');
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const y = String(date.getFullYear()).slice(2);
+        return `${h.user_login} (${d}/${m}/${y})`;
+      }).join(', ');
+      return say(`VIP steal holders (${holders.length}/${vipConfig?.maxVips ?? '?'}): ${list}`);
     },
   },
 
