@@ -95,5 +95,5 @@ export function startAuthServer(): Promise<StoredTokens> {
 }
 
 export function startBroadcasterAuthServer(): Promise<StoredTokens> {
-  return startAuthServerForType('broadcaster', 'channel:read:redemptions channel:manage:vips');
+  return startAuthServerForType('broadcaster', 'channel:bot channel:read:redemptions channel:manage:vips');
 }
