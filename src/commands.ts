@@ -151,6 +151,44 @@ const commands: Record<string, CommandDefinition> = {
       say(`${sender} gives Shiroi cheesecake, but she hates cheesecake and throws it back in your face! Make sure you chew shiroi84Foxangry`),
   },
 
+  icecream: {
+    handler: ({ sender, say }) => {
+      const flavours = [
+        'Vanilla Bean',
+        'Chocolate Fudge',
+        'Strawberry Swirl',
+        'Mint Choc Chip',
+        'Cookies & Cream',
+        'Salted Caramel',
+        'Cookie Dough',
+        'Rocky Road',
+        'Pistachio',
+        'Bubblegum',
+        'Mango Sorbet',
+        'Lemon Sherbet',
+        'Honeycomb Crunch',
+        'Black Sesame',
+        'Matcha Green Tea',
+        'Peanut Butter Cup',
+        'Banana Split',
+        'Cherry Garcia',
+        'Blueberry Cheesecake',
+        'Lavender Honey',
+        'Toasted Coconut',
+        'Raspberry Ripple',
+        'Brownie Batter',
+        'Cotton Candy',
+        'Rum Raisin',
+        'Peach Cobbler',
+        'Cinnamon Roll',
+        'Birthday Cake',
+      ];
+      const pick = flavours[Math.floor(Math.random() * flavours.length)];
+      return say(`${sender} gets a scoop of ${pick} ice cream! Enjoy! shiroi84Foxhappy`);
+    },
+    cooldownSeconds: 300,
+  },
+
   lurk: {
     handler: ({ sender, say }) =>
       say(`${sender}! How dare you attempt to hide in the shadows! I demand your full attention! Get baaaaaack here! shiroi84Foxangry`),

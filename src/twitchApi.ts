@@ -214,15 +214,22 @@ export async function sendChatMessage(accessToken: string, chatMessage: string, 
   if (response.status === 429 && !isRetry) {
     const resetAt = parseInt(response.headers.get('Ratelimit-Reset') ?? '0', 10);
     const waitMs = resetAt * 1000 - Date.now();
+    console.warn(`Rate limited sending chat message — reset in ${Math.ceil(waitMs / 1000)}s: ${chatMessage}`);
     if (waitMs > 0 && waitMs <= 5000) {
       await new Promise((r) => setTimeout(r, waitMs));
       return sendChatMessage(accessToken, chatMessage, botUserId, channelUserId, true);
     }
-    console.error(`Rate limited sending chat message — retry in ${Math.ceil(waitMs / 1000)}s, dropping: ${chatMessage}`);
+    console.error(`Rate limit reset too far away (${Math.ceil(waitMs / 1000)}s), dropping: ${chatMessage}`);
     return false;
   }
 
   const data = await response.json();
+  if (isRetry && response.status === 429) {
+    const resetAt = parseInt(response.headers.get('Ratelimit-Reset') ?? '0', 10);
+    const waitMs = resetAt * 1000 - Date.now();
+    console.error(`Rate limited on retry (reset in ${Math.ceil(waitMs / 1000)}s), dropping: ${chatMessage}`);
+    return false;
+  }
   console.error('Failed to send chat message:', data);
   return false;
 }
