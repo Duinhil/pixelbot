@@ -101,9 +101,9 @@ import { loadVipStealConfig } from './vipSteal';
   }
 
   const vipStealConfig = loadVipStealConfig();
-  if (broadcasterTokens && vipStealConfig?.enabled) {
+  if (broadcasterTokens && vipStealConfig) {
     await registerWebhookRedemptionListener(
-      broadcasterTokens.access_token,
+      await getValidAppToken(),
       primaryChannelId,
       config.webhookCallbackUrl,
       config.webhookSecret,

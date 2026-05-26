@@ -317,7 +317,7 @@ export async function registerWebhookEventSubListeners(
 }
 
 export async function registerWebhookRedemptionListener(
-  broadcasterToken: string,
+  appToken: string,
   broadcasterId: string,
   callbackUrl: string,
   secret: string,
@@ -325,7 +325,7 @@ export async function registerWebhookRedemptionListener(
   const response = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${broadcasterToken}`,
+      Authorization: `Bearer ${appToken}`,
       'Client-Id': config.clientId,
       'Content-Type': 'application/json',
     },
