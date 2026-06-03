@@ -2,6 +2,8 @@ import { incrementCount } from './counters';
 import { lookupUserId, getChannelInfo } from './twitchApi';
 import { loadVipStealConfig, simulateVipStealRedemption, getVipHolders } from './vipSteal';
 import { fakeVipSimulator } from './vipStealSimulator';
+import { db } from './db';
+import { config } from './config';
 
 export interface CommandContext {
   sender: string;                                        // chatter's display name
@@ -201,6 +203,36 @@ const commands: Record<string, CommandDefinition> = {
   fine: { handler: ({ say }) => say(`Shiroi was fine ${incrementCount('fine')} times`), },
   accuse: { handler: ({ say }) => say(`Clevvur has accused Shiroi of ${incrementCount('accuse')} things`), },
   box: { handler: ({ say }) => say(`Streamer has said she loves Yellow Boxes ${incrementCount('box')} times`), },
+
+  addquote: {
+    handler: async ({ args, say, getToken, primaryBroadcasterId }) => {
+      const text = args.join(' ').trim();
+      if (!text) return say('Usage: !addquote <quote text>');
+
+      const token = await getToken();
+      const info = await getChannelInfo(primaryBroadcasterId!, token);
+      const game = info?.game_name || 'Unknown Game';
+
+      const result = db.prepare('INSERT INTO quotes (text, game, added_at) VALUES (?, ?, ?)').run(text, game, Date.now());
+      return say(`Quote #${result.lastInsertRowid} added!`);
+    },
+  },
+
+  quote: {
+    handler: async ({ say, getToken }) => {
+      const row = db.prepare('SELECT id, text, game, added_at FROM quotes ORDER BY RANDOM() LIMIT 1').get() as
+        | { id: number; text: string; game: string; added_at: number }
+        | undefined;
+      if (!row) return say('No quotes saved yet!');
+
+      const token = await getToken();
+      const streamer = await lookupUserId(config.chatChannel, token);
+
+      const d = new Date(row.added_at);
+      const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      return say(`${streamer.displayName} said "${row.text}" on ${dateStr} whilst playing ${row.game}`);
+    },
+  },
 
   so: {
     moderatorOnly: true,

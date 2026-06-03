@@ -40,4 +40,11 @@ db.exec(`
     user_login TEXT NOT NULL,
     added_at   INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS quotes (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    text     TEXT NOT NULL,
+    game     TEXT NOT NULL,
+    added_at INTEGER NOT NULL
+  );
 `);
