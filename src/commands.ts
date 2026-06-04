@@ -280,6 +280,35 @@ const commands: Record<string, CommandDefinition> = {
     },
   },
 
+  lookupquote: {
+    moderatorOnly: true,
+    handler: async ({ args, say, getToken }) => {
+      const id = args[0] ? parseInt(args[0], 10) : null;
+      const row = id
+        ? db.prepare('SELECT id, text, game, added_at FROM quotes WHERE id = ?').get(id) as { id: number; text: string; game: string; added_at: number } | undefined
+        : db.prepare('SELECT id, text, game, added_at FROM quotes ORDER BY RANDOM() LIMIT 1').get() as { id: number; text: string; game: string; added_at: number } | undefined;
+
+      if (!row) return say(id ? `No quote found with ID #${id}.` : 'No quotes saved yet!');
+
+      const token = await getToken();
+      const streamer = await lookupUserId(config.chatChannel, token);
+      const d = new Date(row.added_at);
+      const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      return say(`[#${row.id}] ${streamer.displayName} said "${row.text}" on ${dateStr} whilst playing ${row.game}`);
+    },
+  },
+
+  delquote: {
+    moderatorOnly: true,
+    handler: ({ args, say }) => {
+      const id = parseInt(args[0], 10);
+      if (!id) return say('Usage: !delquote <id>');
+      const result = db.prepare('DELETE FROM quotes WHERE id = ?').run(id);
+      if (result.changes === 0) return say(`No quote found with ID #${id}.`);
+      return say(`Quote #${id} deleted.`);
+    },
+  },
+
   so: {
     moderatorOnly: true,
     handler: async ({ args, say, getToken }) => {
@@ -428,7 +457,7 @@ export async function handleCommand(name: string, ctx: CommandContext): Promise<
   }
 
   if (def.debugOnly && !ctx.isDebug) return;
-  if (def.moderatorOnly && !ctx.isModerator) return;
+  if (def.moderatorOnly && !ctx.isModerator && !ctx.isDebug) return;
 
   const cooldown = def.cooldownSeconds ?? 0;
   if (cooldown > 0) {
