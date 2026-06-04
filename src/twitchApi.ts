@@ -234,6 +234,27 @@ export async function sendChatMessage(accessToken: string, chatMessage: string, 
   return false;
 }
 
+export interface FollowInfo {
+  followed_at: string;
+}
+
+export async function getFollowInfo(broadcasterId: string, userId: string, accessToken: string): Promise<FollowInfo | null> {
+  const response = await fetch(
+    `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${encodeURIComponent(broadcasterId)}&user_id=${encodeURIComponent(userId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Client-Id': config.clientId,
+      },
+    },
+  );
+
+  if (!response.ok) return null;
+
+  const data = await response.json() as { data: FollowInfo[] };
+  return data.data[0] ?? null;
+}
+
 export async function isStreamLive(broadcasterId: string, accessToken: string): Promise<boolean> {
   const response = await fetch(
     `https://api.twitch.tv/helix/streams?user_id=${encodeURIComponent(broadcasterId)}`,

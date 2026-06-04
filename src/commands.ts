@@ -1,5 +1,5 @@
 import { incrementCount } from './counters';
-import { lookupUserId, getChannelInfo } from './twitchApi';
+import { lookupUserId, getChannelInfo, getFollowInfo } from './twitchApi';
 import { loadVipStealConfig, simulateVipStealRedemption, getVipHolders } from './vipSteal';
 import { fakeVipSimulator } from './vipStealSimulator';
 import { db } from './db';
@@ -7,6 +7,7 @@ import { config } from './config';
 
 export interface CommandContext {
   sender: string;                                        // chatter's display name
+  senderId: string;                                      // chatter's user ID
   args: string[];                                        // words after the command
   isModerator: boolean;                                  // true for mods and the broadcaster
   isDebug: boolean;                                      // true when the message is from the debug channel
@@ -203,6 +204,51 @@ const commands: Record<string, CommandDefinition> = {
   fine: { handler: ({ say }) => say(`Shiroi was fine ${incrementCount('fine')} times`), },
   accuse: { handler: ({ say }) => say(`Clevvur has accused Shiroi of ${incrementCount('accuse')} things`), },
   box: { handler: ({ say }) => say(`Streamer has said she loves Yellow Boxes ${incrementCount('box')} times`), },
+
+  followerage: {
+    handler: async ({ sender, senderId, args, say, getToken, getBroadcasterToken, primaryBroadcasterId }) => {
+      const token = await getToken();
+      const target = args[0]?.replace(/^@/, '') || null;
+
+      let userId: string;
+      let displayName: string;
+
+      if (target) {
+        const user = await lookupUserId(target.toLowerCase(), token).catch(() => null);
+        if (!user) return say(`Couldn't find user "${target}".`);
+        userId = user.id;
+        displayName = user.displayName;
+      } else {
+        userId = senderId;
+        displayName = sender;
+      }
+
+      if (!getBroadcasterToken) return say('Broadcaster token not available.');
+      const broadcasterToken = await getBroadcasterToken();
+      const follow = await getFollowInfo(primaryBroadcasterId!, userId, broadcasterToken);
+      if (!follow) return say(`${displayName} is not following the channel.`);
+
+      const followDate = new Date(follow.followed_at);
+      const now = new Date();
+
+      let years = now.getFullYear() - followDate.getFullYear();
+      let months = now.getMonth() - followDate.getMonth();
+      let days = now.getDate() - followDate.getDate();
+      if (days < 0) { months--; days += new Date(now.getFullYear(), now.getMonth(), 0).getDate(); }
+      if (months < 0) { years--; months += 12; }
+
+      const parts: string[] = [];
+      if (years > 0) parts.push(`${years} year${years !== 1 ? 's' : ''}`);
+      if (months > 0) parts.push(`${months} month${months !== 1 ? 's' : ''}`);
+      if (days > 0 || parts.length === 0) parts.push(`${days} day${days !== 1 ? 's' : ''}`);
+
+      const d = String(followDate.getDate()).padStart(2, '0');
+      const m = String(followDate.getMonth() + 1).padStart(2, '0');
+      const y = followDate.getFullYear();
+
+      return say(`${displayName} has been following for ${parts.join(', ')} (since ${d}/${m}/${y})!`);
+    },
+  },
 
   addquote: {
     handler: async ({ args, say, getToken, primaryBroadcasterId }) => {

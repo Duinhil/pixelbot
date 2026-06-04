@@ -18,6 +18,7 @@ const periodicScheduler = new PeriodicMessageScheduler(loadPeriodicMessagesConfi
 
 interface ChatMessageEvent {
   broadcaster_user_id: string;
+  chatter_user_id: string;
   chatter_user_name: string;
   message: { text: string };
   badges: Array<{ set_id: string }>;
@@ -128,7 +129,7 @@ export async function startBot(initialTokens: StoredTokens, initialBroadcasterTo
       periodicScheduler.stop();
 
     } else if (sub === 'channel.chat.message') {
-      const { broadcaster_user_id, chatter_user_name, message, badges } = payload.event as unknown as ChatMessageEvent;
+      const { broadcaster_user_id, chatter_user_id, chatter_user_name, message, badges } = payload.event as unknown as ChatMessageEvent;
       const isModerator = badges.some((b) => b.set_id === 'moderator' || b.set_id === 'lead_moderator' || b.set_id === 'broadcaster');
       const isDebug = broadcaster_user_id === debugChannelId;
 
@@ -136,6 +137,7 @@ export async function startBot(initialTokens: StoredTokens, initialBroadcasterTo
       if (commandWord.startsWith('!')) {
         handleCommand(commandWord.slice(1), {
           sender: chatter_user_name,
+          senderId: chatter_user_id,
           args,
           isModerator,
           isDebug,
