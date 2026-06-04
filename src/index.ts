@@ -1,5 +1,5 @@
 import { config } from './config';
-import { getStoredTokens, getBroadcasterTokens, getDebugBroadcasterTokens } from './auth/tokenStore';
+import { getStoredTokens, getBroadcasterTokens, getDebugBroadcasterTokens, saveTokens, saveBroadcasterTokens } from './auth/tokenStore';
 import { startAuthServer, startBroadcasterAuthServer, startDebugBroadcasterAuthServer } from './auth/server';
 import { startBot } from './bot';
 import { startWebhookServer } from './webhookServer';
@@ -11,6 +11,7 @@ import {
   registerWebhookRedemptionListener,
   validateToken,
   lookupUserId,
+  refreshAccessToken,
 } from './twitchApi';
 import { loadVipStealConfig } from './vipSteal';
 
@@ -19,8 +20,16 @@ import { loadVipStealConfig } from './vipSteal';
   const stored = getStoredTokens();
   let botTokens;
   if (stored) {
-    console.log('Found stored tokens. Starting bot...');
-    botTokens = stored;
+    if (Date.now() >= stored.expires_at - 60_000) {
+      console.log('Bot token expired, refreshing...');
+      const refreshed = await refreshAccessToken(stored.refresh_token);
+      botTokens = { ...stored, access_token: refreshed.access_token, refresh_token: refreshed.refresh_token, expires_at: Date.now() + refreshed.expires_in * 1000 };
+      saveTokens(botTokens);
+      console.log('Bot token refreshed.');
+    } else {
+      console.log('Found stored bot tokens.');
+      botTokens = stored;
+    }
   } else {
     console.log('No tokens found. Starting authorization flow...');
     botTokens = await startAuthServer();
@@ -32,7 +41,15 @@ import { loadVipStealConfig } from './vipSteal';
     console.log('No broadcaster tokens found. Starting broadcaster authorization...');
     broadcasterTokens = await startBroadcasterAuthServer();
   } else {
-    console.log('Found stored broadcaster tokens.');
+    if (Date.now() >= broadcasterTokens.expires_at - 60_000) {
+      console.log('Broadcaster token expired, refreshing...');
+      const refreshed = await refreshAccessToken(broadcasterTokens.refresh_token);
+      broadcasterTokens = { ...broadcasterTokens, access_token: refreshed.access_token, refresh_token: refreshed.refresh_token, expires_at: Date.now() + refreshed.expires_in * 1000 };
+      saveBroadcasterTokens(broadcasterTokens);
+      console.log('Broadcaster token refreshed.');
+    } else {
+      console.log('Found stored broadcaster tokens.');
+    }
   }
 
   // Debug broadcaster OAuth (one-time, only needed when DEBUG_CHANNEL is configured)
