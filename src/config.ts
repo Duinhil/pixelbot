@@ -9,6 +9,7 @@ interface Config {
   debugChannel: string | null; // optional testing channel login
   webhookSecret: string;
   webhookCallbackUrl: string;
+  authHost: string;            // hostname shown in auth URLs (default: localhost)
 }
 
 function requireEnv(name: string): string {
@@ -26,4 +27,5 @@ export const config: Config = {
   debugChannel: process.env['DEBUG_CHANNEL']?.trim() || null,
   webhookSecret: requireEnv('WEBHOOK_SECRET'),
   webhookCallbackUrl: requireEnv('WEBHOOK_CALLBACK_URL'),
+  authHost: (process.env['AUTH_HOST'] ?? `http://localhost:${parseInt(process.env['PORT'] ?? '3000', 10)}`).replace(/\/$/, ''),
 };

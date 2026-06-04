@@ -84,8 +84,7 @@ function startAuthServerForType(type: AuthType, scope: string): Promise<StoredTo
     });
 
     const server = app.listen(config.port, () => {
-      console.log(`Auth server listening on http://localhost:${config.port}`);
-      console.log(`Open http://localhost:${config.port}${authRoute} to authorize.`);
+      console.log(`Open ${config.authHost}${authRoute} to authorize.`);
     });
 
     server.on('error', reject);

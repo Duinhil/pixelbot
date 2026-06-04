@@ -23,7 +23,6 @@ import { loadVipStealConfig } from './vipSteal';
     botTokens = stored;
   } else {
     console.log('No tokens found. Starting authorization flow...');
-    console.log(`Open http://localhost:${config.port}/authorize to begin.`);
     botTokens = await startAuthServer();
   }
 
@@ -31,7 +30,6 @@ import { loadVipStealConfig } from './vipSteal';
   let broadcasterTokens = getBroadcasterTokens();
   if (!broadcasterTokens) {
     console.log('No broadcaster tokens found. Starting broadcaster authorization...');
-    console.log(`Open http://localhost:${config.port}/authorize-broadcaster to authorize the broadcaster account.`);
     broadcasterTokens = await startBroadcasterAuthServer();
   } else {
     console.log('Found stored broadcaster tokens.');
@@ -41,7 +39,6 @@ import { loadVipStealConfig } from './vipSteal';
   if (config.debugChannel) {
     if (!getDebugBroadcasterTokens()) {
       console.log(`Debug channel configured but not yet authorized.`);
-      console.log(`Open http://localhost:${config.port}/authorize-debug-broadcaster and log in as the ${config.debugChannel} broadcaster.`);
       await startDebugBroadcasterAuthServer();
     } else {
       console.log('Found stored debug broadcaster tokens.');
