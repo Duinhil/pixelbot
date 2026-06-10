@@ -131,7 +131,8 @@ export async function startBot(initialTokens: StoredTokens, initialBroadcasterTo
     } else if (sub === 'channel.chat.message') {
       const { broadcaster_user_id, chatter_user_id, chatter_user_name, message, badges } = payload.event as unknown as ChatMessageEvent;
       const isModerator = badges.some((b) => b.set_id === 'moderator' || b.set_id === 'lead_moderator' || b.set_id === 'broadcaster');
-      const isDebug = broadcaster_user_id === debugChannelId;
+      const isDebug = broadcaster_user_id === debugChannelId &&
+        (chatter_user_id === debugChannelId || chatter_user_id === primaryChannelId);
 
       const [commandWord, ...args] = message.text.trim().split(/\s+/);
       if (commandWord.startsWith('!')) {
