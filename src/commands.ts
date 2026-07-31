@@ -201,6 +201,7 @@ const commands: Record<string, CommandDefinition> = {
   pet: { handler: ({ say }) => say(`Pixel has been pet ${incrementCount('pet')} times`), cooldownSeconds: 3600 },
   feed: { handler: ({ say }) => say(`Pixel has been fed ${incrementCount('feed')} times`), cooldownSeconds: 3600 },
   scammed: { handler: ({ say }) => say(`Shiroi has been scammed ${incrementCount('scammed')} times`), },
+  lost: { handler: ({ say }) => say(`Shiroi has gotten lost ${incrementCount('lost')} times`), },
   fine: { handler: ({ say }) => say(`Shiroi was fine ${incrementCount('fine')} times`), },
   accuse: { handler: ({ say }) => say(`Clevvur has accused Shiroi of ${incrementCount('accuse')} things`), },
   box: { handler: ({ say }) => say(`Streamer has said she loves Yellow Boxes ${incrementCount('box')} times`), },
