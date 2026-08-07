@@ -1,5 +1,5 @@
 import { config } from './config';
-import { getStoredTokens, getBroadcasterTokens, getDebugBroadcasterTokens, saveTokens, saveBroadcasterTokens } from './auth/tokenStore';
+import { getStoredTokens, getBroadcasterTokens, getDebugBroadcasterTokens, saveTokens, saveBroadcasterTokens, deleteBroadcasterTokens } from './auth/tokenStore';
 import { startAuthServer, startBroadcasterAuthServer, startDebugBroadcasterAuthServer } from './auth/server';
 import { startBot } from './bot';
 import { startWebhookServer } from './webhookServer';
@@ -43,10 +43,16 @@ import { loadVipStealConfig } from './vipSteal';
   } else {
     if (Date.now() >= broadcasterTokens.expires_at - 60_000) {
       console.log('Broadcaster token expired, refreshing...');
-      const refreshed = await refreshAccessToken(broadcasterTokens.refresh_token);
-      broadcasterTokens = { ...broadcasterTokens, access_token: refreshed.access_token, refresh_token: refreshed.refresh_token, expires_at: Date.now() + refreshed.expires_in * 1000 };
-      saveBroadcasterTokens(broadcasterTokens);
-      console.log('Broadcaster token refreshed.');
+      try {
+        const refreshed = await refreshAccessToken(broadcasterTokens.refresh_token);
+        broadcasterTokens = { ...broadcasterTokens, access_token: refreshed.access_token, refresh_token: refreshed.refresh_token, expires_at: Date.now() + refreshed.expires_in * 1000 };
+        saveBroadcasterTokens(broadcasterTokens);
+        console.log('Broadcaster token refreshed.');
+      } catch (err) {
+        console.error('Broadcaster token refresh failed, re-authorizing...', err);
+        deleteBroadcasterTokens();
+        broadcasterTokens = await startBroadcasterAuthServer();
+      }
     } else {
       console.log('Found stored broadcaster tokens.');
     }

@@ -27,6 +27,10 @@ export function getBroadcasterTokens(): StoredTokens | undefined {
   return db.prepare('SELECT user_id, access_token, refresh_token, expires_at FROM broadcaster_tokens WHERE id = 1').get() as StoredTokens | undefined;
 }
 
+export function deleteBroadcasterTokens(): void {
+  db.prepare('DELETE FROM broadcaster_tokens WHERE id = 1').run();
+}
+
 export function saveBroadcasterTokens(tokens: StoredTokens): void {
   db.prepare(`
     INSERT INTO broadcaster_tokens (id, user_id, access_token, refresh_token, expires_at)
