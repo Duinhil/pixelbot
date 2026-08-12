@@ -47,4 +47,10 @@ db.exec(`
     game     TEXT NOT NULL,
     added_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS weaknesses (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    text     TEXT NOT NULL,
+    added_at INTEGER NOT NULL
+  );
 `);

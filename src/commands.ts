@@ -310,6 +310,57 @@ const commands: Record<string, CommandDefinition> = {
     },
   },
 
+  weakness: {
+    handler: async ({ sender, args, say, getToken }) => {
+      const text = args.join(' ').trim();
+      if (!text) return say('Usage: !weakness <weakness>');
+
+      const token = await getToken();
+      const streamer = await lookupUserId(config.chatChannel, token);
+
+      db.prepare('INSERT INTO weaknesses (text, added_at) VALUES (?, ?)').run(text, Date.now());
+      return say(`${sender} has a theory that ${streamer.displayName} is weak to ${text}`);
+    },
+  },
+
+  saveme: {
+    handler: async ({ say, getToken }) => {
+      const row = db.prepare('SELECT text FROM weaknesses ORDER BY RANDOM() LIMIT 1').get() as
+        | { text: string }
+        | undefined;
+      if (!row) return say('No weaknesses saved yet!');
+
+      const token = await getToken();
+      const streamer = await lookupUserId(config.chatChannel, token);
+
+      return say(`Protect yourself! Remember that ${streamer.displayName} is weak to ${row.text}! Spam it now!`);
+    },
+  },
+
+  lookupweakness: {
+    moderatorOnly: true,
+    handler: ({ args, say }) => {
+      const id = args[0] ? parseInt(args[0], 10) : null;
+      const row = id
+        ? db.prepare('SELECT id, text FROM weaknesses WHERE id = ?').get(id) as { id: number; text: string } | undefined
+        : db.prepare('SELECT id, text FROM weaknesses ORDER BY RANDOM() LIMIT 1').get() as { id: number; text: string } | undefined;
+
+      if (!row) return say(id ? `No weakness found with ID #${id}.` : 'No weaknesses saved yet!');
+      return say(`[#${row.id}] ${row.text}`);
+    },
+  },
+
+  delweakness: {
+    moderatorOnly: true,
+    handler: ({ args, say }) => {
+      const id = parseInt(args[0], 10);
+      if (!id) return say('Usage: !delweakness <id>');
+      const result = db.prepare('DELETE FROM weaknesses WHERE id = ?').run(id);
+      if (result.changes === 0) return say(`No weakness found with ID #${id}.`);
+      return say(`Weakness #${id} deleted.`);
+    },
+  },
+
   so: {
     moderatorOnly: true,
     handler: async ({ args, say, getToken }) => {
