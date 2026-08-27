@@ -53,4 +53,16 @@ db.exec(`
     text     TEXT NOT NULL,
     added_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS farkle_results (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    TEXT NOT NULL,
+    user_login TEXT NOT NULL,
+    score      INTEGER NOT NULL,
+    dice       TEXT NOT NULL,
+    rolled_at  INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_farkle_rolled_at ON farkle_results (rolled_at);
+  CREATE INDEX IF NOT EXISTS idx_farkle_user_id   ON farkle_results (user_id);
 `);

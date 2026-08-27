@@ -115,14 +115,36 @@ const commands: Record<string, CommandDefinition> = {
   },
 
   farkle: {
-    handler: ({ sender, say }) => {
+    handler: ({ sender, senderId, say }) => {
       const dice = Array.from({ length: 6 }, () => roll(1, 6));
       const score = scoreFarkle(dice);
       const diceStr = dice.join(', ');
+      db.prepare(
+        'INSERT INTO farkle_results (user_id, user_login, score, dice, rolled_at) VALUES (?, ?, ?, ?, ?)'
+      ).run(senderId, sender, score, JSON.stringify(dice), Date.now());
       if (score === 0) {
         return say(`${sender} rolled ${diceStr} - FARKLE! 0 points!`);
       }
       return say(`${sender} rolled ${diceStr} and scored ${score.toLocaleString()} points!`);
+    },
+  },
+
+  leaderboard: {
+    cooldownSeconds: 30,
+    handler: ({ args, say }) => {
+      const period = args[0]?.toLowerCase();
+      const cutoff = period === 'daily'  ? Date.now() - 86_400_000
+                   : period === 'weekly' ? Date.now() - 604_800_000
+                   : 0;
+      const rows = db.prepare(
+        `SELECT user_login, MAX(score) as best
+         FROM farkle_results WHERE rolled_at > ?
+         GROUP BY user_id ORDER BY best DESC LIMIT 5`
+      ).all(cutoff) as Array<{ user_login: string; best: number }>;
+      if (rows.length === 0) return say('No farkle scores yet!');
+      const label = period === 'daily' ? 'Today' : period === 'weekly' ? 'This Week' : 'All Time';
+      const list = rows.map((r, i) => `${i + 1}. ${r.user_login} (${r.best.toLocaleString()})`).join(' | ');
+      return say(`Farkle Leaderboard [${label}]: ${list}`);
     },
   },
 
