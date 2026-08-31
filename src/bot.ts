@@ -11,6 +11,7 @@ import { handleCommand } from './commands';
 import { PeriodicMessageScheduler, loadPeriodicMessagesConfig } from './periodicMessages';
 import { loadVipStealConfig, handleVipStealRedemption, expireVipHolders, VipStealConfig } from './vipSteal';
 import { registerWebhookHandler, WebhookEventPayload } from './webhookServer';
+import { initLights } from './lights';
 
 const periodicScheduler = new PeriodicMessageScheduler(loadPeriodicMessagesConfig());
 
@@ -41,6 +42,8 @@ interface RedemptionEvent {
 // --- Bot entry point ---
 
 export async function startBot(initialTokens: StoredTokens, initialBroadcasterTokens?: StoredTokens): Promise<void> {
+  initLights();
+
   let tokens = initialTokens;
   let broadcasterTokens = initialBroadcasterTokens;
 

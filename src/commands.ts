@@ -1,4 +1,5 @@
 import { incrementCount } from './counters';
+import { publishColour, publishPower, publishEffect, parseColour, colourToHex } from './lights';
 import { lookupUserId, getChannelInfo, getFollowInfo } from './twitchApi';
 import { loadVipStealConfig, simulateVipStealRedemption, getVipHolders } from './vipSteal';
 import { fakeVipSimulator } from './vipStealSimulator';
@@ -508,6 +509,31 @@ const commands: Record<string, CommandDefinition> = {
       }
       const target = args[0]?.replace(/^@/, '') || sender;
       return say(fakeVipSimulator.simulate(target, vipConfig));
+    },
+  },
+
+  lights: {
+    moderatorOnly: true,
+    handler: async ({ args, say }) => {
+      const sub = args[0]?.toLowerCase();
+      if (!sub) return say('Usage: !lights on | off | effect <id> [speed] [brightness] | <colour>');
+
+      if (sub === 'on')  { publishPower(true);  return say('Lights on!'); }
+      if (sub === 'off') { publishPower(false); return say('Lights off!'); }
+
+      if (sub === 'effect') {
+        const id  = parseInt(args[1] ?? '', 10);
+        const spd = parseInt(args[2] ?? '16', 10);
+        const bri = parseInt(args[3] ?? '100', 10);
+        if (isNaN(id) || id < 37 || id > 56) return say('Effect ID must be 37-56.');
+        publishEffect(id, spd, bri);
+        return say(`Effect ${id} (speed ${spd}, brightness ${bri}%)`);
+      }
+
+      const colour = parseColour(args);
+      if (!colour) return say('Unknown colour. Try a name (red, blue...), hex (#FF0000), or R G B values.');
+      publishColour(colour.r, colour.g, colour.b);
+      return say(`Lights set to #${colourToHex(colour.r, colour.g, colour.b)}`);
     },
   },
 };

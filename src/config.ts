@@ -10,6 +10,9 @@ interface Config {
   webhookSecret: string;
   webhookCallbackUrl: string;
   authHost: string;            // hostname shown in auth URLs (default: localhost)
+  mqttBrokerUrl: string;       // e.g. mqtt://vps-ip:1883 (empty = disabled)
+  mqttUsername: string;
+  mqttPassword: string;
 }
 
 function requireEnv(name: string): string {
@@ -28,4 +31,7 @@ export const config: Config = {
   webhookSecret: requireEnv('WEBHOOK_SECRET'),
   webhookCallbackUrl: requireEnv('WEBHOOK_CALLBACK_URL'),
   authHost: (process.env['AUTH_HOST'] ?? `http://localhost:${parseInt(process.env['PORT'] ?? '3000', 10)}`).replace(/\/$/, ''),
+  mqttBrokerUrl: process.env['MQTT_BROKER_URL'] ?? '',
+  mqttUsername:  process.env['MQTT_USERNAME']   ?? '',
+  mqttPassword:  process.env['MQTT_PASSWORD']   ?? '',
 };
