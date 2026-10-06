@@ -1,6 +1,6 @@
 import { incrementCount } from './counters';
 import { publishColour, publishPower, publishEffect, parseColour, colourToHex } from './lights';
-import { lookupUserId, getChannelInfo, getFollowInfo } from './twitchApi';
+import { lookupUserId, getChannelInfo, getFollowInfo, getStreamInfo } from './twitchApi';
 import { loadVipStealConfig, simulateVipStealRedemption, getVipHolders } from './vipSteal';
 import { fakeVipSimulator } from './vipStealSimulator';
 import { db } from './db';
@@ -274,6 +274,22 @@ const commands: Record<string, CommandDefinition> = {
     },
   },
 
+  uptime: {
+    handler: async ({ say, getToken, primaryBroadcasterId }) => {
+      const token = await getToken();
+      const stream = await getStreamInfo(primaryBroadcasterId!, token);
+      if (!stream) return say('The stream is currently offline.');
+
+      const totalSeconds = Math.floor((Date.now() - new Date(stream.started_at).getTime()) / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      const timestamp = [hours, minutes, seconds].map((n) => String(n).padStart(2, '0')).join(':');
+
+      return say(`The stream has been live for ${timestamp}`);
+    },
+  },
+
   addquote: {
     handler: async ({ args, say, getToken, primaryBroadcasterId }) => {
       const text = args.join(' ').trim();
@@ -537,6 +553,8 @@ const commands: Record<string, CommandDefinition> = {
     },
   },
 };
+
+commands.timestamp = commands.uptime;
 
 const commandLastUsed = new Map<string, number>();
 

@@ -255,7 +255,11 @@ export async function getFollowInfo(broadcasterId: string, userId: string, acces
   return data.data[0] ?? null;
 }
 
-export async function isStreamLive(broadcasterId: string, accessToken: string): Promise<boolean> {
+export interface StreamInfo {
+  started_at: string;
+}
+
+export async function getStreamInfo(broadcasterId: string, accessToken: string): Promise<StreamInfo | null> {
   const response = await fetch(
     `https://api.twitch.tv/helix/streams?user_id=${encodeURIComponent(broadcasterId)}`,
     {
@@ -266,10 +270,14 @@ export async function isStreamLive(broadcasterId: string, accessToken: string): 
     },
   );
 
-  if (!response.ok) return false;
+  if (!response.ok) return null;
 
-  const data = await response.json() as { data: Array<unknown> };
-  return data.data.length > 0;
+  const data = await response.json() as { data: StreamInfo[] };
+  return data.data[0] ?? null;
+}
+
+export async function isStreamLive(broadcasterId: string, accessToken: string): Promise<boolean> {
+  return (await getStreamInfo(broadcasterId, accessToken)) !== null;
 }
 
 export async function addVip(broadcasterId: string, userId: string, accessToken: string): Promise<void> {

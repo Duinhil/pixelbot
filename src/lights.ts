@@ -1,5 +1,18 @@
 import mqtt from 'mqtt';
+import colourNameList from 'color-name-list';
 import { config } from './config';
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+const COLOUR_MAP: Record<string, [number, number, number]> = Object.fromEntries(
+  (colourNameList as { name: string; hex: string }[]).map(({ name, hex }) => [
+    name.toLowerCase().replace(/\s+/g, ' '),
+    hexToRgb(hex),
+  ])
+);
 
 let client: mqtt.MqttClient | null = null;
 
@@ -30,32 +43,15 @@ export function publishEffect(id: number, speed = 16, brightness = 100): void {
   client?.publish('pixellights/effect', JSON.stringify({ id, speed, brightness }));
 }
 
-const CSS_COLOURS: Record<string, [number, number, number]> = {
-  red:     [255,   0,   0],
-  green:   [  0, 255,   0],
-  blue:    [  0,   0, 255],
-  yellow:  [255, 255,   0],
-  cyan:    [  0, 255, 255],
-  magenta: [255,   0, 255],
-  white:   [255, 255, 255],
-  orange:  [255, 165,   0],
-  purple:  [128,   0, 128],
-  pink:    [255, 105, 180],
-  black:   [  0,   0,   0],
-  teal:    [  0, 128, 128],
-  lime:    [  0, 255,   0],
-  indigo:  [ 75,   0, 130],
-  violet:  [238, 130, 238],
-  gold:    [255, 215,   0],
-  silver:  [192, 192, 192],
-};
-
 export function parseColour(args: string[]): { r: number; g: number; b: number } | null {
   if (!args.length) return null;
 
-  // Named colour
-  const named = CSS_COLOURS[args[0].toLowerCase()];
-  if (named) return { r: named[0], g: named[1], b: named[2] };
+  // Named colour — try progressively shorter phrases (e.g. "hot pink" before "hot")
+  for (let len = args.length; len >= 1; len--) {
+    const phrase = args.slice(0, len).join(' ').toLowerCase();
+    const named = COLOUR_MAP[phrase];
+    if (named) return { r: named[0], g: named[1], b: named[2] };
+  }
 
   // R G B as three decimal integers (checked before 3-char hex to avoid ambiguity)
   if (args.length >= 3 && args.slice(0, 3).every((a) => /^\d+$/.test(a))) {
