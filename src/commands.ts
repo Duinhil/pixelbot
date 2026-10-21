@@ -84,10 +84,17 @@ const cookieList = {
   },
 };
 
+function youtube({ say }: CommandContext) {
+  return say('Check out our VODs on https://www.youtube.com/@ShiroiiAmeVODs');
+}
+
 const commands: Record<string, CommandDefinition> = {
   youtube: {
-    handler: ({ say }) =>
-      say('Check out our VODs on https://www.youtube.com/@ShiroiiAmeVODs'),
+    handler: youtube,
+  },
+
+  vods: {
+    handler: youtube,
   },
 
   discord: {
